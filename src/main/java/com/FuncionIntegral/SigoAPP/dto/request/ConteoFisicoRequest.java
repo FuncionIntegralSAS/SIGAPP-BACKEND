@@ -15,15 +15,15 @@ public class ConteoFisicoRequest {
     @NotBlank(message = "La bodega es obligatoria")
     private String bodega;
 
-    @NotBlank(message = "El bolo es obligatorio")
-    private String bolo;
+    @NotBlank(message = "La bodega es obligatoria")
+    private String bodegaLogica;
 
-    @NotBlank(message = "El artículo es obligatorio")
+    @NotBlank(message = "La bodega es obligatoria")
     private String articulo;
 
     @NotNull(message = "La fecha es obligatoria")
     private Date fecha;
 
-    @NotBlank(message = "El vaex es obligatorio")
-    private String vaex;
+    @NotNull(message = "El verificarExistencia es obligatorio")
+    private String verificarExistencia;
 }

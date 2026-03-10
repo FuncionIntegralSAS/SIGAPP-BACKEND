@@ -22,11 +22,10 @@ public class ConteoFisicoServiceImpl implements ConteoFisicoService {
             conteoFisicoRepository.llamarProcedimientoConteoFisico(
                     request.getEmpresa(),
                     request.getBodega(),
-                    request.getBolo(),
+                    request.getBodegaLogica(),
                     request.getArticulo(),
                     request.getFecha(),
-                    request.getVaex()
-            );
+                    request.getVerificarExistencia());
 
             return ConteoFisicoResponse.builder()
                     .success(true)
@@ -41,7 +40,7 @@ public class ConteoFisicoServiceImpl implements ConteoFisicoService {
                     .build();
         } catch (Exception e) {
             log.error("Error general al procesar el conteo físico: {}", e.getMessage(), e);
-             return ConteoFisicoResponse.builder()
+            return ConteoFisicoResponse.builder()
                     .success(false)
                     .message("Error inesperado al procesar el conteo físico: " + e.getMessage())
                     .build();

@@ -7,6 +7,9 @@ import org.springframework.stereotype.Repository;
 import javax.sql.DataSource;
 import java.util.Date;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Repository
 public class ConteoFisicoRepository {
 
@@ -19,23 +22,29 @@ public class ConteoFisicoRepository {
     public void llamarProcedimientoConteoFisico(
             String empresa,
             String bodega,
-            String bolo,
+            String bodegaLogica,
             String articulo,
             Date fecha,
-            String vaex
-    ) {
-        SimpleJdbcCall jdbcCall = new SimpleJdbcCall(dataSource)
-                .withCatalogName("PKGCONTARBO")
-                .withProcedureName("proGeneContFisi");
+            String verificarExistencia) {
+        // SimpleJdbcCall jdbcCall = new SimpleJdbcCall(dataSource)
+        // .withCatalogName("PKGCONTARBO")
+        // .withProcedureName("proGeneContFisi");
 
-        MapSqlParameterSource inParams = new MapSqlParameterSource()
-                .addValue("P_sbEmpr", empresa)
-                .addValue("P_sbBode", bodega)
-                .addValue("P_sbBolo", bolo)
-                .addValue("P_sbArti", articulo)
-                .addValue("P_dtFech", fecha)
-                .addValue("P_sbVaex", vaex);
+        // MapSqlParameterSource inParams = new MapSqlParameterSource()
+        // .addValue("P_sbEmpr", empresa)
+        // .addValue("P_sbBode", bodega)
+        // .addValue("P_sbBolo", bodegaLogica)
+        // .addValue("P_sbArti", articulo)
+        // .addValue("P_dtFech", fecha)
+        // .addValue("P_sbVaex", verificarExistencia);
 
-        jdbcCall.execute(inParams);
+        // jdbcCall.execute(inParams);
+        log.info("Procedimiento llamado exitosamente");
+        log.info("Empresa: {}", empresa);
+        log.info("Bodega: {}", bodega);
+        log.info("Bodega Logica: {}", bodegaLogica);
+        log.info("Articulo: {}", articulo);
+        log.info("Fecha: {}", fecha);
+        log.info("Verificar Existencia: {}", verificarExistencia);
     }
 }

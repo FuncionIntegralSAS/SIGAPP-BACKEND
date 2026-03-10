@@ -21,18 +21,26 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
 
+    @org.springframework.beans.factory.annotation.Value("${security.developer-mode:false}")
+    private boolean developerMode;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable) // Deshabilitado para APIs REST
                 .cors(Customizer.withDefaults())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/**").permitAll() // Login público
-                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll() // Docs públicos
-                        .anyRequest().authenticated() // lo demás requiere Token
-                );
-        
-        http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+
+        if (developerMode) {
+            http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+        } else {
+            http.authorizeHttpRequests(auth -> auth
+                    .requestMatchers("/api/v1/auth/**").permitAll() // Login público
+                    .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll() // Docs públicos
+                    .anyRequest().authenticated() // lo demás requiere Token
+            );
+            http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+        }
+
         return http.build();
     }
 
@@ -47,7 +55,9 @@ public class SecurityConfig {
         @Override
         public void addCorsMappings(CorsRegistry registry) {
             registry.addMapping("/**") // Todas las rutas
-                    .allowedOrigins("http://localhost:3000", "http://localhost:4200", "http://localhost:5173") // Local dev allowlist
+                    .allowedOrigins("http://localhost:3000", "http://localhost:4200", "http://localhost:5173") // Local
+                                                                                                               // dev
+                                                                                                               // allowlist
                     .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                     .allowedHeaders("Authorization", "Content-Type", "Accept")
                     .allowCredentials(true);
