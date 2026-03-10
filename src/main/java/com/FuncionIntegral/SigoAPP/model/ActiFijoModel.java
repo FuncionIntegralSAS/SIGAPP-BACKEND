@@ -5,7 +5,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Data
 @Builder
@@ -21,5 +20,5 @@ public class ActiFijoModel {
     private BigDecimal acfiCohi; // Costo Histórico
     private String acfiEsta; // Estado del registro (ac = activo)
     private String acfiEsac; // Estado físico del activo (Operativo, Dañado, etc.)
-    private Long  acfiPers; // Código del responsable
+    private Long acfiPers; // Código del responsable
 }

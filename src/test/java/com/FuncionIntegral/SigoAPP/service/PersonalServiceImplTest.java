@@ -40,6 +40,8 @@ class PersonalServiceImplTest {
 
         // Verificamos que NUNCA se llamó a la base de datos
         verify(repository, never()).buscarDinamica(any(), any(), any());
+
+        System.out.println("✅ [buscarPorCriterios_FallaCuandoTodosLosParametrosSonNulos] Excepción validada: " + exception.getReason());
     }
 
     @Test
@@ -67,5 +69,20 @@ class PersonalServiceImplTest {
         assertEquals("EMP01", response.getId());
         assertEquals("Juan Perez", response.getFullName()); // Verifica que concatenó bien
         assertEquals("DIV_ADMIN", response.getDivisionId());
+
+        System.out.println("✅ [buscarPorCriterios_RetornaListaMapeadaCorrectamente] Mapeo de persona exitoso:");
+        resultados.forEach(p -> System.out.println("   -> ID: " + p.getId() + " | Nombre: " + p.getFullName() + " | Div: " + p.getDivisionId()));
+    }
+
+    @Test
+    void buscarPorCriterios_RetornaListaVacia() {
+        when(repository.buscarDinamica("Pedro", null, null)).thenReturn(java.util.Collections.emptyList());
+
+        List<PersonResponse> resultados = service.buscarPorCriterios("Pedro", null, null);
+
+        assertNotNull(resultados);
+        assertTrue(resultados.isEmpty());
+
+        System.out.println("✅ [buscarPorCriterios_RetornaListaVacia] Manejo de lista vacía exitoso.");
     }
 }

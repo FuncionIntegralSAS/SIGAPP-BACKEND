@@ -10,6 +10,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -26,13 +27,12 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                                .anyRequest().permitAll()
-                        /*.requestMatchers("/api/v1/auth/**").permitAll() // Login público
+                        .requestMatchers("/api/v1/auth/**").permitAll() // Login público
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll() // Docs públicos
-                        .anyRequest().authenticated() // lo demás requiere Token */
+                        .anyRequest().authenticated() // lo demás requiere Token
                 );
-        // TODO: REHABILITAR SEGURIDAD ANTES DEL DEPLOY
-        //http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+        
+        http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
@@ -47,10 +47,10 @@ public class SecurityConfig {
         @Override
         public void addCorsMappings(CorsRegistry registry) {
             registry.addMapping("/**") // Todas las rutas
-                    .allowedOrigins("*") // TODO: En producción, pon aquí la URL de tu app
+                    .allowedOrigins("http://localhost:3000", "http://localhost:4200", "http://localhost:5173") // Local dev allowlist
                     .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                     .allowedHeaders("Authorization", "Content-Type", "Accept")
-                    .allowCredentials(false); // Si usas allowedOrigins("*"), esto debe ser false
+                    .allowCredentials(true);
         }
     }
 }

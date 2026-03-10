@@ -1,16 +1,12 @@
 package com.FuncionIntegral.SigoAPP.repository;
 
 import com.FuncionIntegral.SigoAPP.model.ActiFijoModel;
-import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public class ActiFijoRepository {
@@ -21,16 +17,15 @@ public class ActiFijoRepository {
         this.namedJdbcTemplate = namedJdbcTemplate;
     }
 
-
     public List<ActiFijoModel> buscarAsignados(String idResponsable, String idBodega) {
         String sql = """
-        SELECT ACFIARTI, ACFIPLAC, ACFIBODE, ACFIPERS,
-               ACFIOBSE, ACFINUSE, ACFIESTA, ACFIESAC, ACFICOAC
-          FROM ACTIFIJO
-         WHERE ACFIPERS = :responsable
-           AND ACFIESTA = 'ac'
-           AND (:bodega IS NULL OR ACFIBODE = :bodega)
-    """;
+                    SELECT ACFIARTI, ACFIPLAC, ACFIBODE, ACFIPERS,
+                           ACFIOBSE, ACFINUSE, ACFIESTA, ACFIESAC, ACFICOAC
+                      FROM ACTIFIJO
+                     WHERE ACFIPERS = :responsable
+                       AND ACFIESTA = 'ac'
+                       AND (:bodega IS NULL OR ACFIBODE = :bodega)
+                """;
 
         // Mapeo simple de parámetros
         MapSqlParameterSource params = new MapSqlParameterSource()
@@ -40,7 +35,6 @@ public class ActiFijoRepository {
         return namedJdbcTemplate.query(
                 sql,
                 params,
-                new BeanPropertyRowMapper<>(ActiFijoModel.class)
-        );
+                new BeanPropertyRowMapper<>(ActiFijoModel.class));
     }
 }

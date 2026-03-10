@@ -15,7 +15,7 @@ public class ArticleController {
 
     private final ArticleService articleService;
 
-    @GetMapping("/bodega/{idBodega}")
+    /*@GetMapping("/bodega/{idBodega}")
     public ResponseEntity<List<ArticleResponse>> getByWarehouse(@PathVariable String idBodega) {
         List<ArticleResponse> articulos = articleService.obtenerPorBodega(idBodega);
 
@@ -28,7 +28,7 @@ public class ArticleController {
     @GetMapping("/placa/{placa}")
     public ResponseEntity<ArticleResponse> getByPlaca(@PathVariable String placa) {
         return ResponseEntity.ok(articleService.obtenerPorPlaca(placa));
-    }
+    }*/
 
     @GetMapping("/asignados")
     public ResponseEntity<List<ArticleResponse>> getAssignedArticles(
