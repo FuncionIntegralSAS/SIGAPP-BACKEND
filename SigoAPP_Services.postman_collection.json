@@ -1,0 +1,126 @@
+{
+    "info": {
+        "_postman_id": "8e36746a-7a6c-4b5a-9e2c-5fb6b5e79ad3",
+        "name": "SigoAPP Services",
+        "description": "Colección de Postman para los servicios de Bodega y Empresa de SigoAPP",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "Empresas",
+            "item": [
+                {
+                    "name": "Obtener todas las empresas",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/empresas/getAll",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "empresas",
+                                "getAll"
+                            ]
+                        },
+                        "description": "Retorna una lista de todas las empresas registradas."
+                    },
+                    "response": []
+                }
+            ]
+        },
+        {
+            "name": "Bodegas",
+            "item": [
+                {
+                    "name": "Obtener bodegas por empresa",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/bodegas/empresa/:empresa",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "bodegas",
+                                "empresa",
+                                ":empresa"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "empresa",
+                                    "value": "FIINTE",
+                                    "description": "Código de la empresa"
+                                }
+                            ]
+                        },
+                        "description": "Retorna una lista de bodegas filtradas por el código de empresa."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Obtener bodegas por división",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/bodegas/division/:divisionId",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "bodegas",
+                                "division",
+                                ":divisionId"
+                            ],
+                            "variable": [
+                                {
+                                    "key": "divisionId",
+                                    "value": "D001",
+                                    "description": "Código de la división"
+                                }
+                            ]
+                        },
+                        "description": "Retorna una lista de bodegas filtradas por el código de división."
+                    },
+                    "response": []
+                }
+            ]
+        }
+    ],
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    ""
+                ]
+            }
+        },
+        {
+            "listen": "test",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    ""
+                ]
+            }
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:8085",
+            "type": "string"
+        }
+    ]
+}
