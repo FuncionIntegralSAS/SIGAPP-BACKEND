@@ -9,7 +9,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1/bodegas")
@@ -23,14 +27,10 @@ public class BodegaController {
     @GetMapping("/empresa/{empresa}")
     @Operation(summary = "Obtener todas las bodegas por empresa", description = "Retorna una lista de bodegas filtradas por el código de empresa")
     @ApiResponse(responseCode = "200", description = "Lista de bodegas encontrada")
-    @ApiResponse(responseCode = "204", description = "No se encontraron bodegas para la empresa proporcionada")
     public ResponseEntity<List<BodegaDtoResponse>> getByEmpresa(@PathVariable String empresa) {
         List<BodegaDtoResponse> bodegas = bodegaService.buscarTodas(empresa);
 
-        if (bodegas.isEmpty()) {
-            return ResponseEntity.noContent().build();
-        }
-        return ResponseEntity.ok(bodegas);
+        return ResponseEntity.ok(Optional.ofNullable(bodegas).orElse(Collections.emptyList()));
     }
 
     // GET /api/v1/bodegas/division/D001
