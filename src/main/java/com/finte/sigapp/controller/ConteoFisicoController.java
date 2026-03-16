@@ -31,11 +31,10 @@ public class ConteoFisicoController {
             @ApiResponse(responseCode = "200", description = "Conteo registrado exitosamente", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class))),
             @ApiResponse(responseCode = "400", description = "Error en la solicitud o validación del conteo", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class)))
     })
-    @PostMapping
-    public ResponseEntity<ConteoFisicoResponse> registrarConteo(
-            @Valid @RequestBody ConteoFisicoRequest request) {
+    @PostMapping("/registrar")
+    public ResponseEntity<ConteoFisicoResponse> registrarConteo(@Valid @RequestBody ConteoFisicoRequest request) {
 
-        ConteoFisicoResponse response = conteoFisicoService.procesarConteoFisico(request);
+        ConteoFisicoResponse response = conteoFisicoService.generarConteoFisico(request);
 
         if (response.isSuccess()) {
             return ResponseEntity.ok(response);

@@ -8,39 +8,40 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Transactional(rollbackFor =  Exception.class)
 public class ConteoFisicoServiceImpl implements ConteoFisicoService {
 
     private final ConteoFisicoRepository conteoFisicoRepository;
 
     @Override
-    public ConteoFisicoResponse procesarConteoFisico(ConteoFisicoRequest request) {
+    public ConteoFisicoResponse generarConteoFisico(ConteoFisicoRequest request) {
         try {
             // 1. Validar si la bodega ya se encuentra en conteo físico
-            boolean bodegaEnConteo = conteoFisicoRepository.validarBodegaEnConteo(
-                    request.getEmpresa(),
-                    request.getBodega(),
-                    request.getBodegaLogica(),
-                    request.getFecha());
+            boolean bodegaEnConteo = conteoFisicoRepository.validarBodegaEnConteo(request.getEmpresa(),
+                                                                                  request.getBodega(),
+                                                                                  request.getBodegaLogica(),
+                                                                                  request.getFecha());
 
             if (bodegaEnConteo) {
-                log.warn("La bodega {} ya se encuentra en conteo físico activo para el periodo {}.",
-                        request.getBodega(), request.getFecha());
+                log.warn("La bodega {} ya se encuentra en conteo físico activo para el periodo {}.",request.getBodega()
+                        ,request.getFecha());
+
                 return ConteoFisicoResponse.builder()
                         .success(false)
-                        .message("No se puede realizar la solicitud de conteo: la bodega '"
-                                + request.getBodega()
-                                + "' ya se encuentra en proceso de conteo físico para el periodo '"
-                                + request.getFecha() + "'.")
+                        .message("No se puede realizar la solicitud de conteo: la bodega '"+ request.getBodega()+
+                                "' ya se encuentra en proceso de conteo físico para el periodo '"+ request.getFecha() + "'.")
                         .build();
             }
 
             // 2. Si no está en conteo, procesar el conteo físico
-            log.info("Bodega {} disponible. Procesando conteo físico...", request.getBodega());
-            conteoFisicoRepository.llamarProcedimientoConteoFisico(
+            log.info("Bodega {} disponible. generando conteo físico...", request.getBodega());
+
+            conteoFisicoRepository.generarConteoFisico(
                     request.getEmpresa(),
                     request.getBodega(),
                     request.getBodegaLogica(),
@@ -48,10 +49,10 @@ public class ConteoFisicoServiceImpl implements ConteoFisicoService {
                     request.getFecha(),
                     request.getVerificarExistencia());
 
+
             return ConteoFisicoResponse.builder()
                     .success(true)
-                    .message("Conteo físico procesado exitosamente para la bodega '"
-                            + request.getBodega() + "'.")
+                    .message("Conteo físico generado exitosamente para la bodega '"+ request.getBodega() + "'.")
                     .build();
 
         } catch (DataAccessException e) {

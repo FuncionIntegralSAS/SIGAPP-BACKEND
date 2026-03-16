@@ -4,5 +4,5 @@ import com.finte.sigapp.dto.request.ConteoFisicoRequest;
 import com.finte.sigapp.dto.response.ConteoFisicoResponse;
 
 public interface ConteoFisicoService {
-    ConteoFisicoResponse procesarConteoFisico(ConteoFisicoRequest request);
+    ConteoFisicoResponse generarConteoFisico(ConteoFisicoRequest request);
 }

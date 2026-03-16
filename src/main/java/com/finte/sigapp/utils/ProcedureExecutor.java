@@ -10,159 +10,132 @@ import org.springframework.stereotype.Component;
 
 import java.sql.CallableStatement;
 import java.sql.Types;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Utilitario genérico para ejecutar procedimientos y funciones almacenadas en
  * Oracle (PL/SQL).
  *
  * - Procedimientos (void) → usa JPA StoredProcedureQuery.
- * - Funciones con retorno <T> → usa JPA para tipos estándar (String, Integer,
- * Long...),
+ * - Funciones con retorno <T> → usa JPA para tipos estándar (String, Integer,Long...),
  * y Hibernate Session + CallableStatement para Boolean,
  * dado que JDBC/JPA no soportan nativamente el BOOLEAN de Oracle PL/SQL.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class
-ProcedureExecutor {
+public class ProcedureExecutor {
 
     private final EntityManager em;
-
     /**
      * Ejecuta un procedimiento almacenado en Oracle que no retorna valor (void).
      *
-     * @param catalogName   nombre del paquete PL/SQL (ej: "PKGCONTARBO")
-     * @param procedureName nombre del procedimiento (ej: "proGeneContFisi")
-     * @param params        parámetros de entrada: cada Object[] contiene {nombre,
-     *                      valor, Class<?>}
+     * @param procedureName nombre del procedimiento (ej: "PKGCONTARBO.proGeneContFisi")
+     * @param params        parámetros de entrada: cada List<ProcedureParam> contiene {nombre,
+     *                      valor, Class<?>, ParameterMode.IN/OUT}
      */
-    public void ejecutarProcedimiento(String catalogName,
-            String procedureName,
-            Object[]... params) {
-
-        String fullName = procedureName == "" ? procedureName : catalogName + "." + procedureName;
-
-        log.info("Ejecutando procedimiento: {}", fullName);
+    public void ejecutarProcedimiento(String procedureName,List<ProcedureParam> params) {
+        log.info("Ejecutando procedimiento: {}", procedureName);
         try {
-            StoredProcedureQuery query = em.createStoredProcedureQuery(fullName);
-            for (Object[] param : params) {
-                String name = (String) param[0];
-                Object value = param[1];
-                Class<?> type = (Class<?>) param[2];
-                query.registerStoredProcedureParameter(name, type, ParameterMode.IN);
-                query.setParameter(name, value);
-            }
+            StoredProcedureQuery query = em.createStoredProcedureQuery(procedureName);
+            configurarParametros(query,params);
             query.execute();
-            log.info("Procedimiento {} ejecutado correctamente", fullName);
+            log.info("Procedimiento {} ejecutado correctamente", procedureName);
         } catch (Exception e) {
-            log.error("Error ejecutando procedimiento {}: {}", fullName, e.getMessage(), e);
-            throw new RuntimeException("Error ejecutando " + fullName + ": " + e.getMessage(), e);
+            log.error("Error ejecutando procedimiento {}: {}", procedureName, e.getMessage(), e);
+            throw new RuntimeException("Error ejecutando " + procedureName + ": " + e.getMessage(), e);
         }
     }
 
     /**
      * Ejecuta una función PL/SQL de Oracle y retorna un valor del tipo genérico
-     * {@code <T>}.
-     *
-     * <p>
-     * Para tipos estándar (String, Integer, Long, Date, etc.) usa JPA
-     * StoredProcedureQuery.
-     * </p>
-     * <p>
-     * Para {@code Boolean}, usa Hibernate Session + CallableStatement porque JDBC
-     * no soporta
-     * nativamente el tipo BOOLEAN de Oracle PL/SQL. El BOOLEAN se mapea como
-     * INTEGER (1=TRUE, 0=FALSE).
-     * </p>
-     *
-     * <p>
-     * <b>Ejemplo de uso:</b>
-     * </p>
-     * 
-     * <pre>
-     * // Para Boolean:
-     * Boolean enConteo = executor.ejecutarFuncion("PKG", "fun_ValidaBodega", Boolean.class,
-     *         new Object[] { "arg1", "arg2", fecha },
-     *         new int[] { Types.VARCHAR, Types.VARCHAR, Types.DATE });
-     *
-     * // Para String:
-     * String resultado = executor.ejecutarFuncion("PKG", "fun_ObtenerNombre", String.class,
-     *         new Object[] { "codigo" },
-     *         new int[] { Types.VARCHAR });
-     * </pre>
-     *
-     * @param catalogName  nombre del paquete PL/SQL (ej: "PKGCONTARBO")
      * @param functionName nombre de la función (ej: "fun_ValidaBodega")
-     * @param returnType   tipo de retorno esperado (ej: Boolean.class,
-     *                     String.class, Integer.class)
-     * @param bindValues   valores de los parámetros de entrada en orden posicional
-     * @param sqlTypes     tipos SQL de cada parámetro (java.sql.Types)
-     * @return el valor retornado por la función casteado al tipo {@code T}
+     * @param returnType   tipo de retorno esperado (ej: Boolean.class,String.class, Integer.class)
+     * @param params       cada List<ProcedureParam> contiene {nombre,valor, Class<?>, ParameterMode.IN/OUT}
+     * @return el valor retornado por la función casteado al tipo generico.
      */
     @SuppressWarnings("unchecked")
-    public <T> T ejecutarFuncion(String catalogName, String functionName,
-            Class<T> returnType, Object[] bindValues, int[] sqlTypes) {
+    public <T> T ejecutarFuncion(String functionName,Class<T> returnType,List<ProcedureParam> params) {
+        log.info("Ejecutando función: {} con tipo de retorno: {}", functionName, returnType.getSimpleName());
 
-        String fullName = catalogName + "." + functionName;
-        log.info("Ejecutando función: {} con tipo de retorno: {}", fullName, returnType.getSimpleName());
-
-        // Oracle BOOLEAN no es compatible con JDBC estándar → ruta especial vía
-        // Hibernate Session
+        // Manejo especial para BOOLEAN de Oracle
         if (Boolean.class.equals(returnType)) {
-            return (T) ejecutarFuncionBooleanOracleNative(fullName, bindValues, sqlTypes);
+            return (T) ejecutarFuncionBooleanOracleNative(functionName, params);
         }
 
-        // Ruta estándar JPA para cualquier otro tipo de retorno
+        // Ruta estándar JPA para otros tipos
         try {
-            StoredProcedureQuery query = em.createStoredProcedureQuery(fullName);
+            StoredProcedureQuery query = em.createStoredProcedureQuery(functionName);
+            //El primer parámetro en una función JPA suele ser el OUT (return)
             query.registerStoredProcedureParameter(1, returnType, ParameterMode.OUT);
-            for (int i = 0; i < bindValues.length; i++) {
-                query.registerStoredProcedureParameter(i + 2, bindValues[i] != null
-                        ? bindValues[i].getClass()
-                        : Object.class, ParameterMode.IN);
-                query.setParameter(i + 2, bindValues[i]);
+
+            //Registramos los demas parametros desplazando el indice (+1)
+            for (int i = 0; i < params.size(); i++) {
+                ProcedureParam p = params.get(i);
+                query.registerStoredProcedureParameter(i+2, p.getJavaType(), p.getMode());
+                query.setParameter(i+2, p.getValue());
             }
+
             query.execute();
-            T result = (T) query.getOutputParameterValue(1);
-            log.info("Función {} retornó: {}", fullName, result);
-            return result;
+            return (T) query.getOutputParameterValue(1);
         } catch (Exception e) {
-            log.error("Error ejecutando función {}: {}", fullName, e.getMessage(), e);
-            throw new RuntimeException("Error ejecutando " + fullName + ": " + e.getMessage(), e);
+            log.error("Error ejecutando función JPA {}: {}", functionName, e.getMessage());
+            throw new RuntimeException("Error en " + functionName + ": " + e.getMessage());
         }
     }
-
     /**
      * Ruta interna para funciones Oracle que retornan BOOLEAN nativo de PL/SQL.
      * Usa Hibernate Session + CallableStatement con JDBC puro.
      */
-    private Boolean ejecutarFuncionBooleanOracleNative(String fullName,
-            Object[] bindValues, int[] sqlTypes) {
+    private Boolean ejecutarFuncionBooleanOracleNative(String fullName, List<ProcedureParam> params) {
 
-        // Construye: { ? = call PKGCONTARBO.fun_ValidaBodega(?,?,?,?) }
-        StringBuilder placeholders = new StringBuilder();
-        for (int i = 0; i < bindValues.length; i++) {
-            placeholders.append(i == 0 ? "?" : ",?");
+        StringBuilder sb = new StringBuilder();
+        sb.append("begin ");
+        sb.append("  if " + fullName + "(");
+
+        // Construir los placeholders: ?, ?, ?
+        for (int i = 0; i < params.size(); i++) {
+            sb.append(i == 0 ? "?" : ", ?");
         }
-        String callSql = "{ ? = call " + fullName + "(" + placeholders + ") }";
 
+        // Si es true devuelve 1, si es false devuelve 0
+        sb.append(") then ? := 1; else ? := 0; end if; ");
+        sb.append("end;");
+
+        String callSql = sb.toString();
         Session session = em.unwrap(Session.class);
+
         return session.doReturningWork(connection -> {
             try (CallableStatement cs = connection.prepareCall(callSql)) {
-                cs.registerOutParameter(1, Types.INTEGER); // BOOLEAN → INTEGER en Oracle JDBC
-                for (int i = 0; i < bindValues.length; i++) {
-                    if (bindValues[i] == null) {
-                        cs.setNull(i + 2, sqlTypes[i]);
-                    } else {
-                        cs.setObject(i + 2, bindValues[i], sqlTypes[i]);
-                    }
+                int totalParams = params.size();
+
+                // 1. Seteamos los parámetros de entrada de la función (inician en 1)
+                for (int i = 0; i < totalParams; i++) {
+                    ProcedureParam p = params.get(i);
+                    cs.setObject(i + 1, p.getValue());
                 }
+
+                // 2. Registramos los dos placeholders finales que pusimos en el bloque (el ? := 1 y ? := 0)
+                // Ambos apuntan a la misma lógica de salida, pero por simplicidad usaremos dos índices
+                int outputIndex1 = totalParams + 1;
+                int outputIndex2 = totalParams + 2;
+                cs.registerOutParameter(outputIndex1, java.sql.Types.INTEGER);
+                cs.registerOutParameter(outputIndex2, java.sql.Types.INTEGER);
+
                 cs.execute();
-                int result = cs.getInt(1);
-                log.info("Función {} retornó Boolean: {}", fullName, result == 1);
-                return result == 1; // 1 = TRUE, 0 = FALSE
+
+                // Recuperamos el valor (si entró al THEN, el primero tendrá valor)
+                int result = cs.getInt(outputIndex1);
+                return result == 1;
             }
         });
     }
+    private void configurarParametros(StoredProcedureQuery query, List<ProcedureParam> params){
+        for(ProcedureParam param : params){
+            query.registerStoredProcedureParameter(param.getName(), param.getJavaType(), param.getMode());
+            query.setParameter(param.getName(), param.getValue());
+        }
+    }
+
 }
