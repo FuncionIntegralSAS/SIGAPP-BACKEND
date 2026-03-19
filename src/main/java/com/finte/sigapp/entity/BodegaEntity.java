@@ -10,7 +10,7 @@ import lombok.AllArgsConstructor;
 @AllArgsConstructor
 @Entity
 @Table(name = "BODEGA")
-@IdClass(BodegaId.class)
+@IdClass(BodegaPK.class)
 public class BodegaEntity {
 
     @Id

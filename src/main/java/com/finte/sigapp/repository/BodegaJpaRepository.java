@@ -1,7 +1,7 @@
 package com.finte.sigapp.repository;
 
 import com.finte.sigapp.entity.BodegaEntity;
-import com.finte.sigapp.entity.BodegaId;
+import com.finte.sigapp.entity.BodegaPK;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -10,7 +10,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface BodegaJpaRepository extends JpaRepository<BodegaEntity, BodegaId> {
+public interface BodegaJpaRepository extends JpaRepository<BodegaEntity, BodegaPK> {
 
     @Query(value = """
             SELECT T.BODECODI,T.BODEEMPR, T.BODEDESC, T.BODEESTA 
