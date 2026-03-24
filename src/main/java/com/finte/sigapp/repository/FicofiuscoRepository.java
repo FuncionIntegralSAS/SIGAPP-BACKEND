@@ -10,6 +10,6 @@ public interface FicofiuscoRepository extends JpaRepository<FicofiuscoEntity,Lon
 
     Optional<FicofiuscoEntity> findByUSCODOCU(String documento);
 
-    @Query(value = "SELECT SEQUSCO.NEXTVAL FROM DUAL", nativeQuery = true)
+    @Query(value = "SELECT SEQ_COFIUSCO.NEXTVAL FROM DUAL", nativeQuery = true)
     Long obtenerSiguienteId();
 }

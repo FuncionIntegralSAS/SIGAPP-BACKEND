@@ -14,7 +14,7 @@ public class ContarboPK implements Serializable {
     private String coabEmpr;
     private String coabBode;
     private String coabBolo;
-    private LocalDateTime coabFech;
+    private String coabFech;
     private String coabArti;
     private String coabPlac;
 }

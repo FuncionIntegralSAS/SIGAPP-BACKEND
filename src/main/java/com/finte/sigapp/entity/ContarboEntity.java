@@ -7,7 +7,6 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
@@ -30,7 +29,7 @@ public class ContarboEntity {
 
     @Id
     @Column(name = "COABFECH")
-    private LocalDateTime coabFech;
+    private String coabFech;
 
     @Id
     @Column(name = "COABARTI", length = 50)
@@ -40,16 +39,16 @@ public class ContarboEntity {
     @Column(name = "COABPLAC",length = 50)
     private String coabPlac;
 
-    @Column(name = "COABCAC1")
+    @Column(name = "COABCAC1", precision = 12, scale = 4)
     private BigDecimal coabCac1;
 
-    @Column(name = "COABCAC2")
+    @Column(name = "COABCAC2", precision = 12, scale = 4)
     private BigDecimal coabCac2;
 
-    @Column(name = "COABCAC3")
+    @Column(name = "COABCAC3", precision = 12, scale = 4)
     private BigDecimal coabCac3;
 
-    @Column(name = "COABCABO")
+    @Column(name = "COABCABO", precision = 12, scale = 4)
     private BigDecimal coabCabo;
 
     @Column(name = "COABDIEM")
@@ -58,11 +57,11 @@ public class ContarboEntity {
     @Column(name = "COABDITD")
     private String coabDitd;
 
-    @Column(name = "COABDIND")
-    private BigInteger coabDind;
+    @Column(name = "COABDIND", precision = 9, scale = 0)
+    private BigDecimal coabDind;
 
     @Column(name = "COABFESI")
-    private LocalDateTime coabFesi;
+    private String coabFesi;
 
     @Column(name = "COABDIGI")
     private String coabDigi;
@@ -73,10 +72,10 @@ public class ContarboEntity {
     @Column(name = "COABESTA")
     private String coabEsta;
 
-    @Column(name = "COABVAUN")
-    private BigInteger coabVaun;
+    @Column(name = "COABVAUN", precision = 12, scale = 0)
+    private BigDecimal coabVaun;
 
     @Column(name = "COABFECI")
-    private LocalDateTime coabFeci;
+    private String coabFeci;
 
 }

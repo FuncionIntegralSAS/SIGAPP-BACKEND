@@ -8,6 +8,7 @@ import com.finte.sigapp.repository.FicofiuscoRepository;
 import com.finte.sigapp.repository.PersonalJpaRepository;
 import com.finte.sigapp.service.FicofiuscoService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -16,6 +17,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class FicofiuscoServiceImpl implements FicofiuscoService {
 
     private final FicofiuscoRepository ficofiuscoRepository;
@@ -23,7 +25,7 @@ public class FicofiuscoServiceImpl implements FicofiuscoService {
 
     public List<FicofiuscoEntity> procesarUsuarios(AsignacionConteoRequest request){
         return request.getUsuarios().stream()
-                .map(this::validarUsuarioPersona) //todo: probar y validar si dejó aquí la validación
+//                .map(this::validarUsuarioPersona) //todo: realizar método a parte
                 .map(this::mapearOActualizarUsuario)
                 .map(ficofiuscoRepository::save)
                 .toList();
@@ -38,9 +40,10 @@ public class FicofiuscoServiceImpl implements FicofiuscoService {
         return dto;
     }
     private FicofiuscoEntity mapearOActualizarUsuario(UsuarioConteoDTO dto){
+        log.info("mapeando usuario");
         String codigoTemporal = generarCodigoTemporal();
         LocalDateTime ahora = LocalDateTime.now();
-
+        log.info("codigoTemporal {} fecha", codigoTemporal, ahora);
         return ficofiuscoRepository.findByUSCODOCU(dto.getDocumento())
                 .map(usuario -> {
                     usuario.setUSCOCODI(codigoTemporal);
@@ -61,6 +64,7 @@ public class FicofiuscoServiceImpl implements FicofiuscoService {
                 });
     }
     private String generarCodigoTemporal(){
+        log.info("generando codigo temporal");
         return String.valueOf(ThreadLocalRandom.current().nextInt(100000,999999));
     }
     private Long obtenerSiguienteIdUsuario(){

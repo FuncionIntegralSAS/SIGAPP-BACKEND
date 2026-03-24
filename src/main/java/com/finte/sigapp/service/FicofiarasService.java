@@ -1,7 +1,8 @@
 package com.finte.sigapp.service;
 
 import com.finte.sigapp.dto.request.AsignacionConteoRequest;
+import com.finte.sigapp.dto.response.ConteoFisicoResponse;
 
 public interface FicofiarasService {
-    void asignarArticulos(AsignacionConteoRequest request);
+    ConteoFisicoResponse asignarArticulos(AsignacionConteoRequest request);
 }

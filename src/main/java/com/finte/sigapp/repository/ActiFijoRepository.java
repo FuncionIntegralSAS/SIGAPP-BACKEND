@@ -21,8 +21,6 @@ public interface ActiFijoRepository extends JpaRepository<ActiFijoModel,Long> {
       AND ACFIESTA = 'ac'
       AND (:bodega IS NULL OR ACFIBODE = :bodega)            
     """, nativeQuery = true)
-    List<ActiFijoModel> buscarAsignados(
-            @Param("responsable") String responsable,
-            @Param("bodega") String bodega
-    );
+    List<ActiFijoModel> buscarAsignados(@Param("responsable") String responsable,
+                                        @Param("bodega") String bodega);
 }
