@@ -45,44 +45,53 @@ public class FicofiarasServiceImpl implements FicofiarasService {
     }
 
     private List<ContarboEntity> obtenerArticulos(AsignacionConteoRequest request){
-        String fecha = formatoFecha(request.getFechaConteo());
+        String fecha = formatoFechaDDmmYYYY(request.getFechaConteo());
+
         log.info("asignarArticulos formateada fecha {}",fecha);
 
         List<ContarboEntity> articulos = contarboRepository.obtenerArticulosOrdenados(request.getEmpresa(),
                                                                                       request.getBodega(),
                                                                                       fecha);
+
         log.info("cantidad articulos {}",articulos.size());
+
         if (articulos.isEmpty()){
             throw new RuntimeException("No existen artículos en conteo activo para esta bodega");
         }
         return articulos;
     }
-    private String formatoFecha(LocalDateTime input){
+    private String formatoFechaDDmmYYYY(LocalDateTime input){
         return input.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
     }
 
     private Map<FicofiuscoEntity, List<ContarboEntity>> generarBloques(List<FicofiuscoEntity> usuarios,
                                                                        List<ContarboEntity> articulos){
-        List<FicofiuscoEntity> usuariosRandom = new ArrayList<>(usuarios);
-        Collections.shuffle(usuariosRandom);
+        validarParametros(usuarios,articulos);
+
+        List<FicofiuscoEntity> usuariosAleatorios = new ArrayList<>(usuarios);
+        Collections.shuffle(usuariosAleatorios);
 
         Map<FicofiuscoEntity,List<ContarboEntity>> bloques = new LinkedHashMap<>();
 
         int totalArticulos = articulos.size();
         int totalUsuarios = usuarios.size();
-        int base = totalArticulos/totalUsuarios;
-        int residuo = totalArticulos % totalUsuarios;
 
-        int desde = 0;
+        int articulosPorUsuario = totalArticulos/totalUsuarios;
+        int articulosRestantes = totalArticulos % totalUsuarios;
 
-        for (int i = 0; i < usuariosRandom.size(); i++){
-            int cantidad = base + (i< residuo ? 1: 0);
-            int hasta = desde + cantidad;
+        int indiceInicio = 0;
 
-            List<ContarboEntity> bloque  = articulos.subList(desde,hasta);
-            bloques.put(usuariosRandom.get(i),bloque);
+        for (int i = 0; i < totalUsuarios; i++ ){
+            int cantidadAsignada = articulosPorUsuario + (i < articulosRestantes ? 1 : 0);
+            int indiceFin = indiceInicio + cantidadAsignada;
 
-            desde = hasta;
+            List<ContarboEntity> bloque  = new ArrayList<>(
+                    articulos.subList(indiceInicio,indiceFin)
+            );
+
+            bloques.put(usuariosAleatorios.get(i),bloque);
+
+            indiceInicio = indiceFin;
         }
         return bloques;
     }
@@ -117,5 +126,14 @@ public class FicofiarasServiceImpl implements FicofiarasService {
             }
         }
         ficofiarasRepository.saveAll(asignaciones);
+    }
+    private void validarParametros(List<FicofiuscoEntity> usuarios,
+                                    List<ContarboEntity> articulos){
+        if (usuarios == null || usuarios.isEmpty()){
+            throw new IllegalArgumentException("La lista de usuarios no puede ser nula");
+        }
+        if ( articulos == null){
+            throw new IllegalArgumentException("La lista de articulos no puede ser nula");
+        }
     }
 }
