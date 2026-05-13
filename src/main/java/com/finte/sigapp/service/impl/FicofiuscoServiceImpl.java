@@ -42,30 +42,51 @@ public class FicofiuscoServiceImpl implements FicofiuscoService {
     private FicofiuscoEntity mapearOActualizarUsuario(UsuarioConteoDTO dto){
         log.info("mapeando usuario");
         String codigoTemporal = generarCodigoTemporal();
-        LocalDateTime ahora = LocalDateTime.now();
-        log.info("codigoTemporal {} fecha", codigoTemporal, ahora);
+        LocalDateTime fechaCreacion = LocalDateTime.now();
+
+        log.info("codigoTemporal {} fecha {} documento {}",
+                codigoTemporal, fechaCreacion, dto.getDocumento());
+
         return ficofiuscoRepository.findByUSCODOCU(dto.getDocumento())
-                .map(usuario -> {
-                    usuario.setUSCOCODI(codigoTemporal);
-                    usuario.setUSCOESTA("ac");
-                    usuario.setUSCOFECR(ahora);
-                    return usuario;
-                })
-                .orElseGet(() -> {
-                    FicofiuscoEntity nuevo = new FicofiuscoEntity();
-                    nuevo.setUSCOIDUS(obtenerSiguienteIdUsuario());
-                    nuevo.setUSCODOCU(dto.getDocumento());
-                    nuevo.setUSCONOMB(dto.getNombre());
-                    nuevo.setUSCOEMAI(dto.getEmail());
-                    nuevo.setUSCOCODI(codigoTemporal);
-                    nuevo.setUSCOESTA("ac");
-                    nuevo.setUSCOFECR(ahora);
-                    return nuevo;
-                });
+                .map(usuario -> actualizarUsuarioExistente(
+                        usuario,
+                        codigoTemporal,
+                        fechaCreacion))
+                .orElseGet(() -> crearNuevoUsuario(
+                        dto,
+                        codigoTemporal,
+                        fechaCreacion
+                ));
     }
     private String generarCodigoTemporal(){
         log.info("generando codigo temporal");
         return String.valueOf(ThreadLocalRandom.current().nextInt(100000,999999));
+    }
+
+    private FicofiuscoEntity actualizarUsuarioExistente(FicofiuscoEntity usuario,
+                                                        String codigotemporal,
+                                                        LocalDateTime fechaCreacion){
+        log.info("Actualizando usuario existente");
+        usuario.setUSCOCODI(codigotemporal);
+        usuario.setUSCOFECR(fechaCreacion);
+        usuario.setUSCOESTA("ac");
+
+        return usuario;
+    }
+
+    private FicofiuscoEntity crearNuevoUsuario(UsuarioConteoDTO dto,
+                                               String codigoTemporal,
+                                               LocalDateTime fechaCreacion){
+        FicofiuscoEntity entity = new FicofiuscoEntity();
+        entity.setUSCOIDUS(obtenerSiguienteIdUsuario());
+        entity.setUSCODOCU(dto.getDocumento());
+        entity.setUSCONOMB(dto.getNombre());
+        entity.setUSCOEMAI(dto.getEmail());
+        entity.setUSCOCODI(codigoTemporal);
+        entity.setUSCOESTA("ac");
+        entity.setUSCOFECR(fechaCreacion);
+
+        return entity;
     }
     private Long obtenerSiguienteIdUsuario(){
         return ficofiuscoRepository.obtenerSiguienteId();
