@@ -25,8 +25,11 @@ import java.util.*;
 @Slf4j
 public class FicofiarasServiceImpl implements FicofiarasService {
 
+    private static final String ESTADO_PENDIENTE = "pe";
+    private static final String SIN_CONTAR = "N";
+    private static final int NUMERO_CONTEO_INICIAL = 1;
+
     private final ContarboRepository contarboRepository;
-    private final FicofiuscoRepository ficofiuscoRepository;
     private final FicofiarasRepository ficofiarasRepository;
     private final FicofiuscoService ficofiuscoService;
 
@@ -55,9 +58,6 @@ public class FicofiarasServiceImpl implements FicofiarasService {
 
         log.info("cantidad articulos {}",articulos.size());
 
-        if (articulos.isEmpty()){
-            throw new RuntimeException("No existen artículos en conteo activo para esta bodega");
-        }
         return articulos;
     }
     private String formatoFechaDDmmYYYY(LocalDateTime input){
@@ -98,34 +98,60 @@ public class FicofiarasServiceImpl implements FicofiarasService {
 
     private void persistirAsignaciones(Map<FicofiuscoEntity,List<ContarboEntity>> bloques,
                                        AsignacionConteoRequest request){
-        Long idAsignacion = ficofiarasRepository.obtenerIdConteo();
+        Long idConteo = ficofiarasRepository.obtenerIdConteo();
+        LocalDateTime fechaConteo = LocalDateTime.now();
 
-        List<FicofiarasEntity> asignaciones =  new ArrayList<>();
+        List<FicofiarasEntity> asignaciones =
+                construirAsignaciones(bloques,request,idConteo,fechaConteo);
 
-        for(Map.Entry<FicofiuscoEntity, List<ContarboEntity>> entry : bloques.entrySet()){
+        ficofiarasRepository.saveAll(asignaciones);
 
+    }
+    private List<FicofiarasEntity> construirAsignaciones (Map<FicofiuscoEntity, List<ContarboEntity>> bloques,
+                                                          AsignacionConteoRequest request,
+                                                          Long idConteo,
+                                                          LocalDateTime fechaConteo){
+        List<FicofiarasEntity> asignaciones = new ArrayList<>();
+
+        for(Map.Entry<FicofiuscoEntity,List<ContarboEntity>> entry : bloques.entrySet( )){
             FicofiuscoEntity usuario = entry.getKey();
 
-            for (ContarboEntity articulo : entry.getValue()) {
-
-                FicofiarasEntity asignacion = new FicofiarasEntity();
-
-                asignacion.setARASIDAS(ficofiarasRepository.obtenerSiguienteId());
-                asignacion.setARASIDCO(idAsignacion);
-                asignacion.setARASIDBO(request.getBodega());
-                asignacion.setARASIDAR(articulo.getCoabArti());
-                asignacion.setARASIDUS(usuario.getUSCOIDUS());
-                asignacion.setARASNUCO(1);
-                asignacion.setARASCOQR(articulo.getCoabPlac());
-                asignacion.setARASCANT(null);
-                asignacion.setARASFECO(LocalDateTime.now());
-                asignacion.setARASESTA("pe");
-                asignacion.setARASSINC("N");
-
-                asignaciones.add(asignacion);
+            for (ContarboEntity articulo : entry.getValue()){
+                asignaciones.add(
+                        crearAsignacion(
+                                usuario,
+                                articulo,
+                                request,
+                                idConteo,
+                                fechaConteo
+                        )
+                );
             }
         }
-        ficofiarasRepository.saveAll(asignaciones);
+        return asignaciones;
+    }
+
+    private FicofiarasEntity crearAsignacion(FicofiuscoEntity usuario,
+                                             ContarboEntity articulo,
+                                             AsignacionConteoRequest request,
+                                             Long idConteo,
+                                             LocalDateTime fechaConteo){
+
+        FicofiarasEntity asignacion = new FicofiarasEntity();
+
+        asignacion.setARASIDAS(ficofiarasRepository.obtenerSiguienteId());
+        asignacion.setARASIDCO(idConteo);
+        asignacion.setARASIDBO(request.getBodega());
+        asignacion.setARASIDAR(articulo.getCoabArti());
+        asignacion.setARASIDUS(usuario.getUSCOIDUS());
+        asignacion.setARASNUCO(NUMERO_CONTEO_INICIAL);//PENDIENTE VALIDAR CONTEOS
+        asignacion.setARASCOQR(articulo.getCoabPlac());
+        asignacion.setARASCANT(null);
+        asignacion.setARASFECO(fechaConteo);
+        asignacion.setARASESTA(ESTADO_PENDIENTE);
+        asignacion.setARASSINC(SIN_CONTAR);
+
+        return asignacion;
     }
     private void validarParametros(List<FicofiuscoEntity> usuarios,
                                     List<ContarboEntity> articulos){
