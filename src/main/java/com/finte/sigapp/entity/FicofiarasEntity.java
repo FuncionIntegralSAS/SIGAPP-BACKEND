@@ -46,9 +46,12 @@ public class FicofiarasEntity {
     @Column(name = "ARASPLAC", columnDefinition = "placa del articulo")
     private String ARASPLAC;
 
-        @Column(name = "ARASESTA", columnDefinition = "Estado: PENDIENTE, CONTADO, VALIDADO")
+    @Column(name = "ARASESTA", columnDefinition = "Estado: PENDIENTE, CONTADO, VALIDADO")
     private String ARASESTA;
 
     @Column(name = "ARASSINC",columnDefinition = "Sincronización: S,N")
     private String ARASSINC;
+
+    @Column(name = "ARASFESI", columnDefinition = "Fecha Sincronización")
+    private LocalDateTime ARASFESI;
 }
