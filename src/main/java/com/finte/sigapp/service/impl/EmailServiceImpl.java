@@ -1,26 +1,50 @@
 package com.finte.sigapp.service.impl;
 
-import com.finte.sigapp.service.BodegaService;
+import com.finte.sigapp.dto.response.ProcedureResultResponse;
+import com.finte.sigapp.entity.FicofiuscoEntity;
+import com.finte.sigapp.repository.CorreoRepository;
 import com.finte.sigapp.service.EmailService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class EmailServiceImpl implements EmailService {
 
-    private final JavaMailSender mailSender;
+    private final CorreoRepository correoRepository;
 
-    public void enviarCodigoAcceso(String destino, String codigo){
+    @Value("${app.features.envio-correo}")
 
-        SimpleMailMessage mensaje = new SimpleMailMessage();
+    private boolean envioCorreoHabilitado;
+    @Override
+    public void enviarCodigoAcceso(List<FicofiuscoEntity> usuarios){
+        if (!envioCorreoHabilitado){
+            log.info("[DEV] envio deshabilitado - {} usuarios omitidos.", usuarios.size());
+            return;
+        }
 
-        mensaje.setTo(destino);
-        mensaje.setSubject("Codigo temporal de acceso SIGAPP conteo fisico");
-        mensaje.setText("Su código temporal de acceso es: " + codigo);
+        usuarios.forEach(this::procesarEnvio);
+    }
 
-        mailSender.send(mensaje);
+    private void procesarEnvio(FicofiuscoEntity usuario){
+        try {
+            ProcedureResultResponse resultado = correoRepository
+                    .enviarCodigo(usuario.getUSCOEMAI(), usuario.getUSCOCODI());
+
+            if (resultado.getErrorId() == 0L){
+                log.info("Correo enviado a '{}'", usuario.getUSCOEMAI());
+            }else{
+                log.warn("Oracle reportó fallo para '{}': {}",
+                        usuario.getUSCOEMAI(), resultado.getErrorLog());
+            }
+        }catch (Exception e){
+            log.error("Error técnico enviando correo a '{}' : {}",
+                    usuario.getUSCOEMAI(), e.getMessage(),e);
+        }
     }
 }

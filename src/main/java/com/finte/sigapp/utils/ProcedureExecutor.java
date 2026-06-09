@@ -2,6 +2,7 @@ package com.finte.sigapp.utils;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.ParameterMode;
+import jakarta.persistence.Query;
 import jakarta.persistence.StoredProcedureQuery;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,8 +10,11 @@ import org.hibernate.Session;
 import org.springframework.stereotype.Component;
 
 import java.sql.CallableStatement;
+import java.sql.Connection;
 import java.sql.Types;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -131,6 +135,69 @@ public class ProcedureExecutor {
             }
         });
     }
+
+    public void ejecutarBloqueAnonimo(String bloquePlsql,
+                                      Map<String, Object> params){
+        log.info("init bloque PLSQL");
+        try {
+            Query query = em.createNativeQuery(bloquePlsql);
+
+            params.forEach(query::setParameter);
+
+            query.executeUpdate();
+
+            log.info("Bloque PL/SQL ejecutado correctamente");
+
+        }catch (Exception e){
+            log.error("Error ejecutnado bloque PL/SQL: {}", e.getMessage(),e );
+            throw new RuntimeException("Error ejecutando bloque PL/SQL", e);
+        }
+    }
+
+    public Map<String, Object> ejecutarBloqueConSalida(String bloquePlsql,
+                                                       List<ProcedureParam> paramsIn,
+                                                       List<ProcedureParam> paramsOut) {
+
+        log.info("iniciando bloque PLSQL con parametros OUT");
+
+        Map<String, Object> resultadoSalida = new HashMap<>();
+        Session session = em.unwrap(Session.class);
+
+        return session.doReturningWork(connection -> {
+            try (CallableStatement cs = connection.prepareCall(bloquePlsql)) {
+                int index = 1;
+                /*Registrar parametros IN*/
+                if (paramsIn != null) {
+                    for (ProcedureParam param : paramsIn) {
+                        cs.setObject(index++, param.getValue());
+                    }
+                }
+
+                int outStartIndex = index;
+                if (paramsOut != null) {
+                    for (ProcedureParam param : paramsOut) {
+                        cs.registerOutParameter(index++, getSqlType(param.getJavaType()));
+                    }
+                }
+
+                cs.execute();
+
+                if (paramsOut != null) {
+                    int outIndex = outStartIndex;
+                    for (ProcedureParam param : paramsOut) {
+                        Object value = cs.getObject(outIndex++);
+                        resultadoSalida.put(param.getName(), value);
+                        log.debug("Parámetro OUT '{}' = {}", param.getName(), value);
+                    }
+                }
+                log.info("Bloque PLSQL ejecutado correctamente. Salidas: {}", resultadoSalida);
+                return resultadoSalida;
+            } catch (Exception e) {
+                log.error("Error ejecutando bloque PLSQL con salida: {}", e.getMessage());
+                throw new RuntimeException("Error ejecutando bloque PLSQL con salida: " + e.getMessage());
+            }
+        });
+    }
     private void configurarParametros(StoredProcedureQuery query, List<ProcedureParam> params){
         for(ProcedureParam param : params){
             query.registerStoredProcedureParameter(param.getName(), param.getJavaType(), param.getMode());
@@ -138,4 +205,13 @@ public class ProcedureExecutor {
         }
     }
 
+    private int getSqlType(Class<?> javaType){
+        if (javaType == String.class)                   return Types.VARCHAR;
+        if (javaType == Integer.class || javaType == int.class)   return Types.INTEGER;
+        if (javaType == Long.class || javaType == long.class)     return Types.NUMERIC;
+        if (javaType == Boolean.class || javaType == boolean.class) return Types.INTEGER; // Oracle no tiene BOOLEAN JDBC
+        if (javaType == java.util.Date.class)           return Types.DATE;
+        if (javaType == java.math.BigDecimal.class)     return Types.NUMERIC;
+        return Types.VARCHAR;
+    }
 }

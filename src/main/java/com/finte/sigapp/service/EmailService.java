@@ -1,5 +1,9 @@
 package com.finte.sigapp.service;
 
+import com.finte.sigapp.entity.FicofiuscoEntity;
+
+import java.util.List;
+
 public interface EmailService {
-    void enviarCodigoAcceso(String destino, String codigo);
+    void enviarCodigoAcceso(List<FicofiuscoEntity> usuarios);
 }

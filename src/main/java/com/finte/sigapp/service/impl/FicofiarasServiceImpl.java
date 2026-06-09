@@ -8,6 +8,7 @@ import com.finte.sigapp.entity.FicofiuscoEntity;
 import com.finte.sigapp.repository.ContarboRepository;
 import com.finte.sigapp.repository.FicofiarasRepository;
 import com.finte.sigapp.repository.FicofiuscoRepository;
+import com.finte.sigapp.service.EmailService;
 import com.finte.sigapp.service.FicofiarasService;
 import com.finte.sigapp.service.FicofiuscoService;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ public class FicofiarasServiceImpl implements FicofiarasService {
     private final ContarboRepository contarboRepository;
     private final FicofiarasRepository ficofiarasRepository;
     private final FicofiuscoService ficofiuscoService;
+    private final EmailService emailService;
 
     @Override
     public ConteoFisicoResponse asignarArticulos(AsignacionConteoRequest request) {
@@ -39,12 +41,15 @@ public class FicofiarasServiceImpl implements FicofiarasService {
         List<FicofiuscoEntity> usuarios = ficofiuscoService.procesarUsuarios(request);
         //formateo fecha para query nativa de contarbo
         List<ContarboEntity> articulos = obtenerArticulos(request);
-        //todo: implementar metodos en orden y probar, por ahora solo se coloca como va el flujo
         Map<FicofiuscoEntity,List<ContarboEntity>> bloques = generarBloques(usuarios,articulos);
         persistirAsignaciones(bloques,request);
-//        enviarCorreo(usuarios);
+        //todo: implementar metodos en orden y probar, por ahora solo se coloca como va el flujo
+        emailService.enviarCodigoAcceso(usuarios);
 
-        return ConteoFisicoResponse.builder().success(true).message("OK").build();
+        return ConteoFisicoResponse.builder()
+                .success(true)
+                .message("OK")
+                .build();
     }
 
     private List<ContarboEntity> obtenerArticulos(AsignacionConteoRequest request){

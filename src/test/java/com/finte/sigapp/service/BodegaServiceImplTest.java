@@ -48,7 +48,7 @@ class BodegaServiceImplTest {
         assertEquals("BOD01", result.get(0).getId());
         assertEquals("Bodega Central", result.get(0).getName());
 
-        System.out.println("✅ [buscarPorDivision_RetornaListaMapeada] Bodegas transformadas y mapeadas:");
+        System.out.println("[buscarPorDivision_RetornaListaMapeada] Bodegas transformadas y mapeadas:");
         result.forEach(b -> System.out.println("   -> ID: " + b.getId() + " | Nombre: " + b.getName()));
     }
 
@@ -61,7 +61,7 @@ class BodegaServiceImplTest {
         assertNotNull(result);
         assertEquals(0, result.size());
 
-        System.out.println("✅ [buscarPorDivision_RetornaListaVaciaLocal] Comportamiento con Bodegas vacías validado.");
+        System.out.println("[buscarPorDivision_RetornaListaVaciaLocal] Comportamiento con Bodegas vacías validado.");
     }
 
     @Test
