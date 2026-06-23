@@ -155,6 +155,8 @@ public class FicofiarasServiceImpl implements FicofiarasService {
         asignacion.setARASFECO(fechaConteo);
         asignacion.setARASESTA(ESTADO_PENDIENTE);
         asignacion.setARASSINC(SIN_CONTAR);
+        asignacion.setARASEMPR(articulo.getCoabEmpr());
+        asignacion.setARASPLAC(articulo.getCoabPlac());
 
         return asignacion;
     }
