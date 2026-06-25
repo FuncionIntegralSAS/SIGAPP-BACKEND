@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.math.BigInteger;
 
 @Data
 @NoArgsConstructor
@@ -24,7 +23,7 @@ public class ContarboEntity {
     private String coabBode;
 
     @Id
-    @Column(name = "COABBOLO",length = 4)
+    @Column(name = "COABBOLO", length = 4)
     private String coabBolo;
 
     @Id
@@ -36,7 +35,7 @@ public class ContarboEntity {
     private String coabArti;
 
     @Id
-    @Column(name = "COABPLAC",length = 50)
+    @Column(name = "COABPLAC", length = 50)
     private String coabPlac;
 
     @Column(name = "COABCAC1", precision = 12, scale = 4)

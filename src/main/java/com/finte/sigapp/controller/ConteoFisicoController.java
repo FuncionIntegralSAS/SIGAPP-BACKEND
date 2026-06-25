@@ -1,5 +1,8 @@
 package com.finte.sigapp.controller;
 
+import com.finte.sigapp.dto.response.PendienteArticuloResponse;
+import com.finte.sigapp.service.PendienteArticulosService;
+
 import com.finte.sigapp.dto.request.AsignacionConteoRequest;
 import com.finte.sigapp.dto.request.ConteoFisicoRequest;
 import com.finte.sigapp.dto.response.ConteoFisicoResponse;
@@ -14,12 +17,15 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
 
 @RestController
 @RequestMapping("/api/v1/conteo-fisico")
@@ -30,6 +36,9 @@ public class ConteoFisicoController {
 
     private final ConteoFisicoService conteoFisicoService;
     private final FicofiarasService ficofiarasService;
+    private final PendienteArticulosService pendienteArticulosService;
+
+
 
     @Operation(summary = "Registrar un conteo físico", description = "Procesa y registra un nuevo conteo físico consumiendo el procedimiento PL/SQL.")
     @ApiResponses(value = {
@@ -54,13 +63,23 @@ public class ConteoFisicoController {
             @ApiResponse(responseCode = "400", description = "Error en la solicitud o validación del conteo", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class)))
     })
     @PostMapping("/asignar_articulos")
-    public ResponseEntity<ConteoFisicoResponse> asignarArticulos(@Valid @RequestBody AsignacionConteoRequest request){
+    public ResponseEntity<ConteoFisicoResponse> asignarArticulos(@Valid @RequestBody AsignacionConteoRequest request) {
         log.info("Controller AsignarArticulo ");
         ficofiarasService.asignarArticulos(request);
 
         return ResponseEntity.ok(ConteoFisicoResponse.builder().success(true).message("OK SERVICIO").build());
 
+    }
 
+    @Operation(summary = "Obtener artículos pendientes", description = "Retorna la lista de artículos pendientes para cache offline.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Lista obtenida", content = @Content(schema = @Schema(implementation = PendienteArticuloResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Error interno")
+    })
+    @GetMapping("/pendientes")
+    public ResponseEntity<List<PendienteArticuloResponse>> obtenerPendientes(@RequestParam Long idUsuario) {
+        List<PendienteArticuloResponse> lista = pendienteArticulosService.obtenerPendientesPorUsuario(idUsuario);
+        return ResponseEntity.ok(lista);
     }
 
 }

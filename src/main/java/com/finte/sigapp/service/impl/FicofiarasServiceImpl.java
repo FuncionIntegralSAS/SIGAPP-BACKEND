@@ -7,7 +7,6 @@ import com.finte.sigapp.entity.FicofiarasEntity;
 import com.finte.sigapp.entity.FicofiuscoEntity;
 import com.finte.sigapp.repository.ContarboRepository;
 import com.finte.sigapp.repository.FicofiarasRepository;
-import com.finte.sigapp.repository.FicofiuscoRepository;
 import com.finte.sigapp.service.EmailService;
 import com.finte.sigapp.service.FicofiarasService;
 import com.finte.sigapp.service.FicofiuscoService;
@@ -39,11 +38,12 @@ public class FicofiarasServiceImpl implements FicofiarasService {
     public ConteoFisicoResponse asignarArticulos(AsignacionConteoRequest request) {
         log.info("asignarArticulos init");
         List<FicofiuscoEntity> usuarios = ficofiuscoService.procesarUsuarios(request);
-        //formateo fecha para query nativa de contarbo
+        // formateo fecha para query nativa de contarbo
         List<ContarboEntity> articulos = obtenerArticulos(request);
-        Map<FicofiuscoEntity,List<ContarboEntity>> bloques = generarBloques(usuarios,articulos);
-        persistirAsignaciones(bloques,request);
-        //todo: implementar metodos en orden y probar, por ahora solo se coloca como va el flujo
+        Map<FicofiuscoEntity, List<ContarboEntity>> bloques = generarBloques(usuarios, articulos);
+        persistirAsignaciones(bloques, request);
+        // todo: implementar metodos en orden y probar, por ahora solo se coloca como va
+        // el flujo
         emailService.enviarCodigoAcceso(usuarios);
 
         return ConteoFisicoResponse.builder()
@@ -52,95 +52,93 @@ public class FicofiarasServiceImpl implements FicofiarasService {
                 .build();
     }
 
-    private List<ContarboEntity> obtenerArticulos(AsignacionConteoRequest request){
+    private List<ContarboEntity> obtenerArticulos(AsignacionConteoRequest request) {
         String fecha = formatoFechaDDmmYYYY(request.getFechaConteo());
 
-        log.info("asignarArticulos formateada fecha {}",fecha);
+        log.info("asignarArticulos formateada fecha {}", fecha);
 
         List<ContarboEntity> articulos = contarboRepository.obtenerArticulosOrdenados(request.getEmpresa(),
-                                                                                      request.getBodega(),
-                                                                                      fecha);
+                request.getBodega(),
+                fecha);
 
-        log.info("cantidad articulos {}",articulos.size());
+        log.info("cantidad articulos {}", articulos.size());
 
         return articulos;
     }
-    private String formatoFechaDDmmYYYY(LocalDateTime input){
+
+    private String formatoFechaDDmmYYYY(LocalDateTime input) {
         return input.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
     }
 
     private Map<FicofiuscoEntity, List<ContarboEntity>> generarBloques(List<FicofiuscoEntity> usuarios,
-                                                                       List<ContarboEntity> articulos){
-        validarParametros(usuarios,articulos);
+            List<ContarboEntity> articulos) {
+        validarParametros(usuarios, articulos);
 
         List<FicofiuscoEntity> usuariosAleatorios = new ArrayList<>(usuarios);
         Collections.shuffle(usuariosAleatorios);
 
-        Map<FicofiuscoEntity,List<ContarboEntity>> bloques = new LinkedHashMap<>();
+        Map<FicofiuscoEntity, List<ContarboEntity>> bloques = new LinkedHashMap<>();
 
         int totalArticulos = articulos.size();
         int totalUsuarios = usuarios.size();
 
-        int articulosPorUsuario = totalArticulos/totalUsuarios;
+        int articulosPorUsuario = totalArticulos / totalUsuarios;
         int articulosRestantes = totalArticulos % totalUsuarios;
 
         int indiceInicio = 0;
 
-        for (int i = 0; i < totalUsuarios; i++ ){
+        for (int i = 0; i < totalUsuarios; i++) {
             int cantidadAsignada = articulosPorUsuario + (i < articulosRestantes ? 1 : 0);
             int indiceFin = indiceInicio + cantidadAsignada;
 
-            List<ContarboEntity> bloque  = new ArrayList<>(
-                    articulos.subList(indiceInicio,indiceFin)
-            );
+            List<ContarboEntity> bloque = new ArrayList<>(
+                    articulos.subList(indiceInicio, indiceFin));
 
-            bloques.put(usuariosAleatorios.get(i),bloque);
+            bloques.put(usuariosAleatorios.get(i), bloque);
 
             indiceInicio = indiceFin;
         }
         return bloques;
     }
 
-    private void persistirAsignaciones(Map<FicofiuscoEntity,List<ContarboEntity>> bloques,
-                                       AsignacionConteoRequest request){
+    private void persistirAsignaciones(Map<FicofiuscoEntity, List<ContarboEntity>> bloques,
+            AsignacionConteoRequest request) {
         Long idConteo = ficofiarasRepository.obtenerIdConteo();
         LocalDateTime fechaConteo = LocalDateTime.now();
 
-        List<FicofiarasEntity> asignaciones =
-                construirAsignaciones(bloques,request,idConteo,fechaConteo);
+        List<FicofiarasEntity> asignaciones = construirAsignaciones(bloques, request, idConteo, fechaConteo);
 
         ficofiarasRepository.saveAll(asignaciones);
 
     }
-    private List<FicofiarasEntity> construirAsignaciones (Map<FicofiuscoEntity, List<ContarboEntity>> bloques,
-                                                          AsignacionConteoRequest request,
-                                                          Long idConteo,
-                                                          LocalDateTime fechaConteo){
+
+    private List<FicofiarasEntity> construirAsignaciones(Map<FicofiuscoEntity, List<ContarboEntity>> bloques,
+            AsignacionConteoRequest request,
+            Long idConteo,
+            LocalDateTime fechaConteo) {
         List<FicofiarasEntity> asignaciones = new ArrayList<>();
 
-        for(Map.Entry<FicofiuscoEntity,List<ContarboEntity>> entry : bloques.entrySet( )){
+        for (Map.Entry<FicofiuscoEntity, List<ContarboEntity>> entry : bloques.entrySet()) {
             FicofiuscoEntity usuario = entry.getKey();
 
-            for (ContarboEntity articulo : entry.getValue()){
+            for (ContarboEntity articulo : entry.getValue()) {
                 asignaciones.add(
                         crearAsignacion(
                                 usuario,
                                 articulo,
                                 request,
                                 idConteo,
-                                fechaConteo
-                        )
-                );
+                                fechaConteo));
             }
         }
         return asignaciones;
     }
 
     private FicofiarasEntity crearAsignacion(FicofiuscoEntity usuario,
-                                             ContarboEntity articulo,
-                                             AsignacionConteoRequest request,
-                                             Long idConteo,
-                                             LocalDateTime fechaConteo){
+            ContarboEntity articulo,
+            AsignacionConteoRequest request,
+            Long idConteo,
+            LocalDateTime fechaConteo) {
 
         FicofiarasEntity asignacion = new FicofiarasEntity();
 
@@ -149,7 +147,7 @@ public class FicofiarasServiceImpl implements FicofiarasService {
         asignacion.setARASIDBO(request.getBodega());
         asignacion.setARASIDAR(articulo.getCoabArti());
         asignacion.setARASIDUS(usuario.getUSCOIDUS());
-        asignacion.setARASNUCO(NUMERO_CONTEO_INICIAL);//PENDIENTE VALIDAR CONTEOS
+        asignacion.setARASNUCO(NUMERO_CONTEO_INICIAL);// PENDIENTE VALIDAR CONTEOS
         asignacion.setARASCOQR(articulo.getCoabPlac());
         asignacion.setARASCANT(null);
         asignacion.setARASFECO(fechaConteo);
@@ -160,12 +158,13 @@ public class FicofiarasServiceImpl implements FicofiarasService {
 
         return asignacion;
     }
+
     private void validarParametros(List<FicofiuscoEntity> usuarios,
-                                    List<ContarboEntity> articulos){
-        if (usuarios == null || usuarios.isEmpty()){
+            List<ContarboEntity> articulos) {
+        if (usuarios == null || usuarios.isEmpty()) {
             throw new IllegalArgumentException("La lista de usuarios no puede ser nula");
         }
-        if ( articulos == null){
+        if (articulos == null) {
             throw new IllegalArgumentException("La lista de articulos no puede ser nula");
         }
     }
