@@ -24,4 +24,12 @@ public class ArticleServiceImpl implements ArticleService {
                 .map(mapper::toResponse)
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public List<ArticleResponse> obtenerAsignadosPorBodega(String bodega) {
+        return repository.buscarAsignadosPorBodega(bodega)
+                .stream()
+                .map(mapper::toResponse)
+                .collect(Collectors.toList());
+    }
 }
