@@ -18,32 +18,25 @@ public class PendienteArticulosServiceImpl implements PendienteArticulosService 
     @Override
     public List<PendienteArticuloResponse> obtenerPendientes() {
         List<FicofiarasEntity> entidades = ficofiarasRepository.findPendientes();
-        return entidades.stream().map(e -> {
-            PendienteArticuloResponse dto = new PendienteArticuloResponse();
-            dto.setNumeroConteo(e.getARASNUCO());
-            dto.setCodigoQr(e.getARASCOQR());
-            dto.setCantidadContada(e.getARASCANT());
-            dto.setEstado(e.getARASESTA());
-            dto.setIdBodega(e.getARASIDBO());
-            dto.setIdArticulo(e.getARASIDAR());
-            dto.setIdUsuario(e.getARASIDUS());
-            return dto;
-        }).collect(Collectors.toList());
+        return entidades.stream().map(this::mapToDto).collect(Collectors.toList());
     }
 
     @Override
     public List<PendienteArticuloResponse> obtenerPendientesPorUsuario(Long idUsuario) {
         List<FicofiarasEntity> entidades = ficofiarasRepository.findPendientesPorUsuario(idUsuario);
-        return entidades.stream().map(e -> {
-            PendienteArticuloResponse dto = new PendienteArticuloResponse();
-            dto.setNumeroConteo(e.getARASNUCO());
-            dto.setCodigoQr(e.getARASCOQR());
-            dto.setCantidadContada(e.getARASCANT());
-            dto.setEstado(e.getARASESTA());
-            dto.setIdBodega(e.getARASIDBO());
-            dto.setIdArticulo(e.getARASIDAR());
-            dto.setIdUsuario(e.getARASIDUS());
-            return dto;
-        }).collect(Collectors.toList());
+        return entidades.stream().map(this::mapToDto).collect(Collectors.toList());
+    }
+
+    /** Helper para mapear FicofiarasEntity a PendienteArticuloResponse */
+    private PendienteArticuloResponse mapToDto(FicofiarasEntity e) {
+        PendienteArticuloResponse dto = new PendienteArticuloResponse();
+        dto.setNumeroConteo(e.getARASNUCO());
+        dto.setCodigoQr(e.getARASCOQR());
+        dto.setCantidadContada(e.getARASCANT());
+        dto.setEstado(e.getARASESTA());
+        dto.setIdBodega(e.getARASIDBO());
+        dto.setIdArticulo(e.getARASIDAR());
+        dto.setIdUsuario(e.getARASIDUS());
+        return dto;
     }
 }

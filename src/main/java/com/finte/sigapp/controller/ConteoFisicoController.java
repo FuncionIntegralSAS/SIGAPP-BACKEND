@@ -8,6 +8,8 @@ import com.finte.sigapp.dto.request.ConteoFisicoRequest;
 import com.finte.sigapp.dto.response.ConteoFisicoResponse;
 import com.finte.sigapp.service.ConteoFisicoService;
 import com.finte.sigapp.service.FicofiarasService;
+import com.finte.sigapp.security.JwtTokenProvider;
+import org.springframework.web.bind.annotation.RequestHeader;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -37,8 +39,7 @@ public class ConteoFisicoController {
     private final ConteoFisicoService conteoFisicoService;
     private final FicofiarasService ficofiarasService;
     private final PendienteArticulosService pendienteArticulosService;
-
-
+    private final JwtTokenProvider tokenProvider;
 
     @Operation(summary = "Registrar un conteo físico", description = "Procesa y registra un nuevo conteo físico consumiendo el procedimiento PL/SQL.")
     @ApiResponses(value = {
@@ -77,8 +78,32 @@ public class ConteoFisicoController {
             @ApiResponse(responseCode = "500", description = "Error interno")
     })
     @GetMapping("/pendientes")
-    public ResponseEntity<List<PendienteArticuloResponse>> obtenerPendientes(@RequestParam Long idUsuario) {
-        List<PendienteArticuloResponse> lista = pendienteArticulosService.obtenerPendientesPorUsuario(idUsuario);
+    public ResponseEntity<List<PendienteArticuloResponse>> obtenerPendientes(
+            @RequestHeader("Authorization") String bearerToken) {
+        // Extract token
+        String token;
+        try {
+            token = tokenProvider.extraerToken(bearerToken);
+        } catch (Exception e) {
+            log.error("Error extracting token", e);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        log.info("bearerToken = {}", bearerToken);
+        // Validate token
+        if (token == null || !tokenProvider.validarToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Long idUsuario1;
+        try {
+            idUsuario1 = tokenProvider.extraerIdUsuario(token);
+        } catch (Exception e) {
+            log.error("Error extracting user ID from token", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+
+        List<PendienteArticuloResponse> lista = pendienteArticulosService.obtenerPendientesPorUsuario(idUsuario1);
         return ResponseEntity.ok(lista);
     }
 

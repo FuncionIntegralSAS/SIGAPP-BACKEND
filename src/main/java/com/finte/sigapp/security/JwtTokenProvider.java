@@ -1,6 +1,8 @@
 package com.finte.sigapp.security;
 
 import com.finte.sigapp.entity.FicofiuscoEntity;
+import com.finte.sigapp.exception.UnauthorizedException;
+
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -12,6 +14,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
@@ -81,6 +85,19 @@ public class JwtTokenProvider {
         return extraerClaims(token).getSubject();
     }
 
+    public Long extraerIdUsuario(String token) {
+        Object id = extraerClaims(token).get("idUsuario");
+        if (id == null) {
+            throw new UnauthorizedException("Token sin claim idUsuario");
+        }
+        if (id instanceof Integer)
+            return ((Integer) id).longValue();
+        if (id instanceof Long)
+            return (Long) id;
+
+        throw new UnauthorizedException("Claim idUsuario no soportado");
+    }
+
     public String getClaimFrowJWT(String token, String claim) {
         return extraerClaims(token).get(claim, String.class);
     }
@@ -101,5 +118,16 @@ public class JwtTokenProvider {
             log.warn("Token invalido {}", e.getMessage());
         }
         return false;
+    }
+
+    public String extraerToken(String bearerToken) throws Exception {
+
+        if (bearerToken == null || bearerToken.isBlank())
+            throw new UnauthorizedException("Token null o en blanco");
+        String decode = URLDecoder.decode(bearerToken, StandardCharsets.UTF_8);
+        if (!decode.startsWith("Bearer ")) {
+            throw new UnauthorizedException("Formato de token invalido");
+        }
+        return decode.substring(7).trim();
     }
 }
