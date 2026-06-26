@@ -26,8 +26,8 @@ public class ArticleServiceImpl implements ArticleService {
     }
 
     @Override
-    public List<ArticleResponse> obtenerAsignadosPorBodega(String bodega) {
-        return repository.buscarAsignadosPorBodega(bodega)
+    public List<ArticleResponse> obtenerAsignadosPorBodegaAndEmpresa(String bodega, String empresa) {
+        return repository.buscarAsignadosPorBodegaAndEmpresa(bodega, empresa)
                 .stream()
                 .map(mapper::toResponse)
                 .collect(Collectors.toList());

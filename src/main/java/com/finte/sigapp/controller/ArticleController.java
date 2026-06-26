@@ -48,10 +48,12 @@ public class ArticleController {
         return ResponseEntity.ok(articulos);
     }
 
-    @GetMapping("/asignados/{bodega}")
+    @GetMapping("/asignados/{bodega}/{empresa}")
     public ResponseEntity<List<ArticleResponse>> getAssignedArticlesByBodega(
-            @PathVariable(name = "bodega") String bodega) {
-        List<ArticleResponse> articulos = articleService.obtenerAsignadosPorBodega(bodega);
+            @PathVariable(name = "bodega") String bodega,
+            @PathVariable(name = "empresa") String empresa) {
+
+        List<ArticleResponse> articulos = articleService.obtenerAsignadosPorBodegaAndEmpresa(bodega, empresa);
 
         if (articulos.isEmpty()) {
             return ResponseEntity.noContent().build();
