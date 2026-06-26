@@ -86,6 +86,10 @@ public class JwtTokenProvider {
     }
 
     public Long extraerIdUsuario(String token) {
+        if (!validarToken(token)) {
+            throw new UnauthorizedException("Token invalido o expirado");
+        }
+
         Object id = extraerClaims(token).get("idUsuario");
         if (id == null) {
             throw new UnauthorizedException("Token sin claim idUsuario");
@@ -121,13 +125,16 @@ public class JwtTokenProvider {
     }
 
     public String extraerToken(String bearerToken) throws Exception {
-
-        if (bearerToken == null || bearerToken.isBlank())
+        if (bearerToken == null || bearerToken.isBlank()) {
             throw new UnauthorizedException("Token null o en blanco");
+        }
+
         String decode = URLDecoder.decode(bearerToken, StandardCharsets.UTF_8);
+
         if (!decode.startsWith("Bearer ")) {
             throw new UnauthorizedException("Formato de token invalido");
         }
+
         return decode.substring(7).trim();
     }
 }

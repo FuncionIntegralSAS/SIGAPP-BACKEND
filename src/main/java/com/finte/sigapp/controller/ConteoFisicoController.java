@@ -79,31 +79,12 @@ public class ConteoFisicoController {
     })
     @GetMapping("/pendientes")
     public ResponseEntity<List<PendienteArticuloResponse>> obtenerPendientes(
-            @RequestHeader("Authorization") String bearerToken) {
-        // Extract token
-        String token;
-        try {
-            token = tokenProvider.extraerToken(bearerToken);
-        } catch (Exception e) {
-            log.error("Error extracting token", e);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+            @RequestHeader("Authorization") String bearerToken) throws Exception {
 
-        log.info("bearerToken = {}", bearerToken);
-        // Validate token
-        if (token == null || !tokenProvider.validarToken(token)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
+        String token = tokenProvider.extraerToken(bearerToken);
+        Long userId = tokenProvider.extraerIdUsuario(token);
+        List<PendienteArticuloResponse> lista = pendienteArticulosService.obtenerPendientesPorUsuario(userId);
 
-        Long idUsuario1;
-        try {
-            idUsuario1 = tokenProvider.extraerIdUsuario(token);
-        } catch (Exception e) {
-            log.error("Error extracting user ID from token", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-
-        List<PendienteArticuloResponse> lista = pendienteArticulosService.obtenerPendientesPorUsuario(idUsuario1);
         return ResponseEntity.ok(lista);
     }
 
