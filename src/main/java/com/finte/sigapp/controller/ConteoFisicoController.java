@@ -5,6 +5,7 @@ import com.finte.sigapp.service.PendienteArticulosService;
 
 import com.finte.sigapp.dto.request.AsignacionConteoRequest;
 import com.finte.sigapp.dto.request.ConteoFisicoRequest;
+import com.finte.sigapp.dto.request.ReporteConteoRequest;
 import com.finte.sigapp.dto.response.ConteoFisicoResponse;
 import com.finte.sigapp.service.ConteoFisicoService;
 import com.finte.sigapp.service.FicofiarasService;
@@ -22,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -88,4 +88,18 @@ public class ConteoFisicoController {
         return ResponseEntity.ok(lista);
     }
 
+    @Operation(summary = "Reportar conteo físico", description = "Actualiza la cantidad por articulos del conteo fisico")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Conteo reportado exitosamente", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Usuario no autorizado", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class)))
+    })
+    @PostMapping("/reportar")
+    public ResponseEntity<ConteoFisicoResponse> reportarConteo(@RequestHeader("Authorization") String bearerToken,
+            @RequestBody ReporteConteoRequest request) {
+
+        String token = tokenProvider.extraerToken(bearerToken);
+        Long userId = tokenProvider.extraerIdUsuario(token);
+
+        return ResponseEntity.ok(ficofiarasService.reportarConteo(userId, request));
+    }
 }

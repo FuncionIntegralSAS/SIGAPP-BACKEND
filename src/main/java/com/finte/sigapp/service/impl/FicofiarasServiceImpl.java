@@ -1,10 +1,13 @@
 package com.finte.sigapp.service.impl;
 
+import com.finte.sigapp.dto.request.ArticuloConteo;
 import com.finte.sigapp.dto.request.AsignacionConteoRequest;
+import com.finte.sigapp.dto.request.ReporteConteoRequest;
 import com.finte.sigapp.dto.response.ConteoFisicoResponse;
 import com.finte.sigapp.entity.ContarboEntity;
 import com.finte.sigapp.entity.FicofiarasEntity;
 import com.finte.sigapp.entity.FicofiuscoEntity;
+import com.finte.sigapp.exception.BussinessException;
 import com.finte.sigapp.repository.ContarboRepository;
 import com.finte.sigapp.repository.FicofiarasRepository;
 import com.finte.sigapp.service.EmailService;
@@ -18,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -27,7 +31,7 @@ public class FicofiarasServiceImpl implements FicofiarasService {
 
     private static final String ESTADO_PENDIENTE = "pe";
     private static final String SIN_CONTAR = "N";
-    private static final int NUMERO_CONTEO_INICIAL = 1;
+    private static final Long NUMERO_CONTEO_INICIAL = 1L;
 
     private final ContarboRepository contarboRepository;
     private final FicofiarasRepository ficofiarasRepository;
@@ -36,14 +40,15 @@ public class FicofiarasServiceImpl implements FicofiarasService {
 
     @Override
     public ConteoFisicoResponse asignarArticulos(AsignacionConteoRequest request) {
+
         log.info("asignarArticulos init");
+
         List<FicofiuscoEntity> usuarios = ficofiuscoService.procesarUsuarios(request);
         // formateo fecha para query nativa de contarbo
         List<ContarboEntity> articulos = obtenerArticulos(request);
         Map<FicofiuscoEntity, List<ContarboEntity>> bloques = generarBloques(usuarios, articulos);
         persistirAsignaciones(bloques, request);
-        // todo: implementar metodos en orden y probar, por ahora solo se coloca como va
-        // el flujo
+
         emailService.enviarCodigoAcceso(usuarios);
 
         return ConteoFisicoResponse.builder()
@@ -168,4 +173,117 @@ public class FicofiarasServiceImpl implements FicofiarasService {
             throw new IllegalArgumentException("La lista de articulos no puede ser nula");
         }
     }
+
+    @Override
+    public ConteoFisicoResponse reportarConteo(Long userId, ReporteConteoRequest request) {
+        log.info("reportarConteo init - userId {},bodega: {}, numeroConteo: {}",
+                userId, request.getBodega(), request.getNumeroConteo());
+
+        validarNumeroConteo(request.getNumeroConteo());
+
+        Map<Long, FicofiarasEntity> pendientesPorArticulo = obtenerPendientesComoMapa(
+                userId, request.getBodega(), request.getNumeroConteo());
+
+        if (pendientesPorArticulo.isEmpty()) {
+            throw new BussinessException(
+                    "El usuario no tiene articulos pendientes para el conteo #" + request.getNumeroConteo()
+                            + " en la bodega " + request.getBodega());
+        }
+
+        validarArticulosExistentes(request.getArticulos(), pendientesPorArticulo);
+
+        List<FicofiarasEntity> entidadesActualizadas = aplicarConteoALista(
+                request.getArticulos(), pendientesPorArticulo, request.getNumeroConteo());
+
+        ficofiarasRepository.saveAll(entidadesActualizadas);
+
+        log.info("reportarConteo OK - {} artículos actualizados", entidadesActualizadas.size());
+
+        return ConteoFisicoResponse.builder()
+                .success(true)
+                .message("Conteo " + request.getNumeroConteo() + " reportado exitosamente — "
+                        + entidadesActualizadas.size() + " artículos actualizados")
+                .build();
+    }
+
+    private Map<Long, FicofiarasEntity> obtenerPendientesComoMapa(Long userId,
+            String BodegaId,
+            Integer numeroConteo) {
+
+        return ficofiarasRepository.findByUserBodega(userId, BodegaId)
+                .stream()
+                .filter(e -> !estadoContado(e, numeroConteo))
+                .filter(e -> e.getARASIDAR() != null)
+                .collect(Collectors.toMap(
+                        FicofiarasEntity::getARASIDAR,
+                        e -> e,
+                        (e1, e2) -> e1 // valida duplicados se queda con el primero
+                ));
+    }
+
+    private void validarNumeroConteo(Integer numeroConteo) {
+        if (numeroConteo == null || numeroConteo < 1 || numeroConteo > 3) {
+            throw new BussinessException("Numero de conteo invalido");
+        }
+    }
+
+    private boolean estadoContado(FicofiarasEntity entity, Integer numeroConteo) {
+        return switch (numeroConteo) {
+            case 1 -> entity.getARASCANT() != null;
+            case 2 -> entity.getARASCNT2() != null;
+            case 3 -> entity.getARASCNT3() != null;
+            default -> false;
+        };
+
+    }
+
+    private void validarArticulosExistentes(List<ArticuloConteo> articulos,
+            Map<Long, FicofiarasEntity> pendientes) {
+
+        List<Long> noEncontrados = articulos.stream()
+                .map(ArticuloConteo::getIdArticulo)
+                .filter(Objects::nonNull)
+                .filter(id -> !pendientes.containsKey(id))
+                .collect(Collectors.toList());
+
+        if (!noEncontrados.isEmpty()) {
+            throw new BussinessException("Articulos no encontrados: " + noEncontrados);
+        }
+    }
+
+    private List<FicofiarasEntity> aplicarConteoALista(List<ArticuloConteo> articulos,
+            Map<Long, FicofiarasEntity> pendientes,
+            Integer numeroConteo) {
+        LocalDateTime now = LocalDateTime.now();
+
+        return articulos.stream()
+                .map(articulo -> aplicarConteo(
+                        pendientes.get(articulo.getIdArticulo()),
+                        articulo.getCantidad(),
+                        numeroConteo,
+                        now))
+                .collect(Collectors.toList());
+    }
+
+    private FicofiarasEntity aplicarConteo(FicofiarasEntity entity,
+            Long cantidad,
+            Integer numeroConteo,
+            LocalDateTime now) {
+        switch (numeroConteo) {
+            case 1 -> {
+                entity.setARASCANT(cantidad);
+                entity.setARASFESI(now);
+            }
+            case 2 -> {
+                entity.setARASCNT2(cantidad);
+                entity.setARASFEC2(now);
+            }
+            case 3 -> {
+                entity.setARASCNT3(cantidad);
+                entity.setARASFEC3(now);
+            }
+        }
+        return entity;
+    }
+
 }

@@ -9,22 +9,12 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
-/**
- * Repository for FI_COFIARAS table.
- * Provides queries for pending articles using the new 8‑character column names.
- */
 @Repository
 public interface FicofiarasRepository extends JpaRepository<FicofiarasEntity, Long> {
 
-  /**
-   * Retrieves all pending articles (status 'PE').
-   */
   @Query(value = "SELECT ARASIDAS, ARASIDCO, ARASIDBO, ARASIDAR, ARASIDUS, ARASNUCO, ARASCOQR, ARASCANT, ARASFECO, ARASEMPR, ARASPLAC, ARASESTA, ARASSINC, ARASFESI, ARASCNT2, ARASCNT3, ARASFEC2, ARASFEC3, ARASSIN2, ARASSIN3, ARASFES2, ARASFES3 FROM FI_COFIARAS WHERE ARASESTA = 'PE'", nativeQuery = true)
   List<FicofiarasEntity> findPendientes();
 
-  /**
-   * Retrieves pending articles (status 'PE') for a specific user.
-   */
   @Query(value = """
       SELECT ARASIDAS, ARASIDCO, ARASIDBO, ARASIDAR,
              ARASIDUS, ARASNUCO, ARASCOQR, ARASCANT,
@@ -44,5 +34,20 @@ public interface FicofiarasRepository extends JpaRepository<FicofiarasEntity, Lo
   /** Generates the next ID for FI_COFIASIG. */
   @Query(value = "SELECT SEQ_COFIASIG.NEXTVAL FROM DUAL", nativeQuery = true)
   Long obtenerIdConteo();
+
+  @Query(value = """
+      SELECT ARASIDAS, ARASIDCO, ARASIDBO, ARASIDAR,
+             ARASIDUS, ARASNUCO, ARASCOQR, ARASCANT,
+             ARASFECO, ARASEMPR, ARASPLAC, ARASESTA,
+             ARASSINC, ARASFESI, ARASCNT2, ARASCNT3,
+             ARASFEC2, ARASFEC3, ARASSIN2, ARASSIN3,
+             ARASFES2, ARASFES3
+        FROM FI_COFIARAS
+       WHERE ARASIDUS = :userId
+         AND ARASIDBO = :bodega
+         AND ARASESTA = 'pe'
+      """, nativeQuery = true)
+  List<FicofiarasEntity> findByUserBodega(@Param("userId") Long userId,
+      @Param("bodega") String bodega);
 
 }

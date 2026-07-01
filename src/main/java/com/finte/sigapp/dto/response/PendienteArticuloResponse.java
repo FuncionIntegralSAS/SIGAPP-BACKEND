@@ -8,11 +8,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class PendienteArticuloResponse {
-    private Integer numeroConteo; // id conteo
+    private Long numeroConteo; // id conteo
     private String codigoQr; // código QR
     private Long cantidadContada; // cantidad contada
     private String estado; // estado
     private String idBodega; // id bodega
-    private String idArticulo; // id artículo
+    private Long idArticulo; // id artículo
     private Long idUsuario; // id usuario
 }

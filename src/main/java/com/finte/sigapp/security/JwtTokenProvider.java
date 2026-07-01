@@ -124,7 +124,7 @@ public class JwtTokenProvider {
         return false;
     }
 
-    public String extraerToken(String bearerToken) throws Exception {
+    public String extraerToken(String bearerToken) {
         if (bearerToken == null || bearerToken.isBlank()) {
             throw new UnauthorizedException("Token null o en blanco");
         }

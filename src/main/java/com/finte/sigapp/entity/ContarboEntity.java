@@ -32,7 +32,7 @@ public class ContarboEntity {
 
     @Id
     @Column(name = "COABARTI", length = 50)
-    private String coabArti;
+    private Long coabArti;
 
     @Id
     @Column(name = "COABPLAC", length = 50)

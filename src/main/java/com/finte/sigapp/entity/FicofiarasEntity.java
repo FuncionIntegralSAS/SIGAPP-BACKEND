@@ -23,13 +23,13 @@ public class FicofiarasEntity {
     private String ARASIDBO;
 
     @Column(name = "ARASIDAR", columnDefinition = "Id artículo sistema financiero")
-    private String ARASIDAR;
+    private Long ARASIDAR;
 
     @Column(name = "ARASIDUS", columnDefinition = "Id usuario responsable")
     private Long ARASIDUS;
 
     @Column(name = "ARASNUCO", columnDefinition = "Número conteo: 1,2,3")
-    private Integer ARASNUCO;
+    private Long ARASNUCO;
 
     @Column(name = "ARASCOQR", columnDefinition = "Código barras artículo")
     private String ARASCOQR;
