@@ -1,6 +1,7 @@
 package com.finte.sigapp.controller;
 
 import com.finte.sigapp.dto.response.PendienteArticuloResponse;
+import com.finte.sigapp.exception.ErrorResponse;
 import com.finte.sigapp.service.PendienteArticulosService;
 
 import com.finte.sigapp.dto.request.AsignacionConteoRequest;
@@ -44,7 +45,7 @@ public class ConteoFisicoController {
     @Operation(summary = "Registrar un conteo físico", description = "Procesa y registra un nuevo conteo físico consumiendo el procedimiento PL/SQL.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Conteo registrado exitosamente", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Error en la solicitud o validación del conteo", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class)))
+            @ApiResponse(responseCode = "400", description = "Error en la solicitud o validación del conteo", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PostMapping("/registrar")
     public ResponseEntity<ConteoFisicoResponse> registrarConteo(@Valid @RequestBody ConteoFisicoRequest request) {
@@ -61,7 +62,7 @@ public class ConteoFisicoController {
     @Operation(summary = "Asignar articulos del conteo físico", description = "Consulta los articulos de la bodega a contar y los asigna a los repsonsables")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Asignación de articulos exitosa", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Error en la solicitud o validación del conteo", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class)))
+            @ApiResponse(responseCode = "400", description = "Error en la solicitud o validación del conteo", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PostMapping("/asignar_articulos")
     public ResponseEntity<ConteoFisicoResponse> asignarArticulos(@Valid @RequestBody AsignacionConteoRequest request) {
@@ -75,7 +76,7 @@ public class ConteoFisicoController {
     @Operation(summary = "Obtener artículos pendientes", description = "Retorna la lista de artículos pendientes para cache offline.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Lista obtenida", content = @Content(schema = @Schema(implementation = PendienteArticuloResponse.class))),
-            @ApiResponse(responseCode = "500", description = "Error interno")
+            @ApiResponse(responseCode = "500", description = "Error interno", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @GetMapping("/pendientes")
     public ResponseEntity<List<PendienteArticuloResponse>> obtenerPendientes(
@@ -91,7 +92,7 @@ public class ConteoFisicoController {
     @Operation(summary = "Reportar conteo físico", description = "Actualiza la cantidad por articulos del conteo fisico")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Conteo reportado exitosamente", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class))),
-            @ApiResponse(responseCode = "403", description = "Usuario no autorizado", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class)))
+            @ApiResponse(responseCode = "403", description = "Usuario no autorizado", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PostMapping("/reportar")
     public ResponseEntity<ConteoFisicoResponse> reportarConteo(@RequestHeader("Authorization") String bearerToken,

@@ -21,7 +21,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
 
-    @org.springframework.beans.factory.annotation.Value("${security.developer-mode:false}")
+    @org.springframework.beans.factory.annotation.Value("${security.developer-mode}")
     private boolean developerMode;
 
     @Bean
@@ -34,10 +34,15 @@ public class SecurityConfig {
             http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         } else {
             http.authorizeHttpRequests(auth -> auth
-                    .requestMatchers("/api/v1/auth/**").permitAll() // Login público
-                    .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll() // Docs públicos
-                    .anyRequest().authenticated() // lo demás requiere Token
-            );
+                    .requestMatchers("/api/v1/auth/**").permitAll()
+                    .requestMatchers(
+                            "/swagger-ui/**",
+                            "/swagger-ui.html",
+                            "/v3/api-docs/**",
+                            "/v3/api-docs.yaml",
+                            "/webjars/**")
+                    .permitAll()
+                    .anyRequest().authenticated());
             http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         }
 
@@ -59,7 +64,7 @@ public class SecurityConfig {
                                                                                                                // dev
                                                                                                                // allowlist
                     .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                    .allowedHeaders("Authorization", "Content-Type", "Accept")
+                    .allowedHeaders("Authoriz   ation", "Content-Type", "Accept")
                     .allowCredentials(true);
         }
     }

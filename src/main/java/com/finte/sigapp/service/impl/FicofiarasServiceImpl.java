@@ -8,6 +8,7 @@ import com.finte.sigapp.entity.ContarboEntity;
 import com.finte.sigapp.entity.FicofiarasEntity;
 import com.finte.sigapp.entity.FicofiuscoEntity;
 import com.finte.sigapp.exception.BussinessException;
+import com.finte.sigapp.exception.catalog.ErrorCode;
 import com.finte.sigapp.repository.ContarboRepository;
 import com.finte.sigapp.repository.FicofiarasRepository;
 import com.finte.sigapp.service.EmailService;
@@ -167,10 +168,10 @@ public class FicofiarasServiceImpl implements FicofiarasService {
     private void validarParametros(List<FicofiuscoEntity> usuarios,
             List<ContarboEntity> articulos) {
         if (usuarios == null || usuarios.isEmpty()) {
-            throw new IllegalArgumentException("La lista de usuarios no puede ser nula");
+            throw new IllegalArgumentException(ErrorCode.SIGAPP_004.getMessage());
         }
         if (articulos == null) {
-            throw new IllegalArgumentException("La lista de articulos no puede ser nula");
+            throw new IllegalArgumentException(ErrorCode.SIGAPP_005.getMessage());
         }
     }
 
@@ -186,8 +187,11 @@ public class FicofiarasServiceImpl implements FicofiarasService {
 
         if (pendientesPorArticulo.isEmpty()) {
             throw new BussinessException(
-                    "El usuario no tiene articulos pendientes para el conteo #" + request.getNumeroConteo()
-                            + " en la bodega " + request.getBodega());
+                    ErrorCode.SIGAPP_002,
+                    String.format("Usuario %d no tiene articulos pendientes para el conteo %d en la bodega %s",
+                            userId,
+                            request.getNumeroConteo(),
+                            request.getBodega()));
         }
 
         validarArticulosExistentes(request.getArticulos(), pendientesPorArticulo);
@@ -223,7 +227,8 @@ public class FicofiarasServiceImpl implements FicofiarasService {
 
     private void validarNumeroConteo(Integer numeroConteo) {
         if (numeroConteo == null || numeroConteo < 1 || numeroConteo > 3) {
-            throw new BussinessException("Numero de conteo invalido");
+            // throw new BussinessException("Numero de conteo invalido");
+            throw new BussinessException(ErrorCode.SIGAPP_001);
         }
     }
 
@@ -247,7 +252,9 @@ public class FicofiarasServiceImpl implements FicofiarasService {
                 .collect(Collectors.toList());
 
         if (!noEncontrados.isEmpty()) {
-            throw new BussinessException("Articulos no encontrados: " + noEncontrados);
+            // throw new BussinessException("Articulos no encontrados: " + noEncontrados);
+            throw new BussinessException(ErrorCode.SIGAPP_002,
+                    String.format("Articulos no encontrados: %s", noEncontrados.toString()));
         }
     }
 

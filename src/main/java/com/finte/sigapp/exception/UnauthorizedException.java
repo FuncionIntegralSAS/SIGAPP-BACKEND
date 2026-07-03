@@ -1,13 +1,17 @@
 package com.finte.sigapp.exception;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ResponseStatus;
+import com.finte.sigapp.exception.catalog.ErrorCode;
 
-@ResponseStatus(HttpStatus.UNAUTHORIZED)
+import lombok.Getter;
+
+@Getter
 public class UnauthorizedException extends RuntimeException {
 
-    public UnauthorizedException(String message) {
-        super(message);
+    private final ErrorCode errorCode;
+
+    public UnauthorizedException(ErrorCode errorCode) {
+        super(errorCode.getMessage());
+        this.errorCode = errorCode;
     }
 
 }

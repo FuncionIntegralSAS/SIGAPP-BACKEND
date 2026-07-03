@@ -1,11 +1,24 @@
 package com.finte.sigapp.exception;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.ResponseStatus;
+import com.finte.sigapp.exception.catalog.ErrorCode;
 
-@ResponseStatus(HttpStatus.BAD_REQUEST)
+import lombok.Getter;
+
+@Getter
 public class BussinessException extends RuntimeException {
-    public BussinessException(String message) {
-        super(message);
+
+    private final ErrorCode errorCode;
+    private final String message;
+
+    public BussinessException(ErrorCode errorCode, String message) {
+        // super(errorCode.getMessage());
+        this.errorCode = errorCode;
+        this.message = message;
+    }
+
+    public BussinessException(ErrorCode errorCode) {
+        super(errorCode.getMessage());
+        this.errorCode = errorCode;
+        this.message = null;
     }
 }

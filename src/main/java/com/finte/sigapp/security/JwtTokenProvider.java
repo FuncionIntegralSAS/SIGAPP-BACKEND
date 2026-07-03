@@ -2,6 +2,7 @@ package com.finte.sigapp.security;
 
 import com.finte.sigapp.entity.FicofiuscoEntity;
 import com.finte.sigapp.exception.UnauthorizedException;
+import com.finte.sigapp.exception.catalog.ErrorCode;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -87,19 +88,19 @@ public class JwtTokenProvider {
 
     public Long extraerIdUsuario(String token) {
         if (!validarToken(token)) {
-            throw new UnauthorizedException("Token invalido o expirado");
+            throw new UnauthorizedException(ErrorCode.SIGAPP_402);
         }
 
         Object id = extraerClaims(token).get("idUsuario");
         if (id == null) {
-            throw new UnauthorizedException("Token sin claim idUsuario");
+            throw new UnauthorizedException(ErrorCode.SIGAPP_405);
         }
         if (id instanceof Integer)
             return ((Integer) id).longValue();
         if (id instanceof Long)
             return (Long) id;
 
-        throw new UnauthorizedException("Claim idUsuario no soportado");
+        throw new UnauthorizedException(ErrorCode.SIGAPP_405);
     }
 
     public String getClaimFrowJWT(String token, String claim) {
@@ -126,13 +127,13 @@ public class JwtTokenProvider {
 
     public String extraerToken(String bearerToken) {
         if (bearerToken == null || bearerToken.isBlank()) {
-            throw new UnauthorizedException("Token null o en blanco");
+            throw new UnauthorizedException(ErrorCode.SIGAPP_405);
         }
 
         String decode = URLDecoder.decode(bearerToken, StandardCharsets.UTF_8);
 
         if (!decode.startsWith("Bearer ")) {
-            throw new UnauthorizedException("Formato de token invalido");
+            throw new UnauthorizedException(ErrorCode.SIGAPP_405);
         }
 
         return decode.substring(7).trim();

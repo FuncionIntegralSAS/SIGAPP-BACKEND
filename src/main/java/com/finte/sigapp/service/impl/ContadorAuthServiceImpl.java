@@ -7,6 +7,7 @@ import com.finte.sigapp.dto.request.LoginContadorRequest;
 import com.finte.sigapp.dto.response.AuthResponse;
 import com.finte.sigapp.entity.FicofiuscoEntity;
 import com.finte.sigapp.exception.UnauthorizedException;
+import com.finte.sigapp.exception.catalog.ErrorCode;
 import com.finte.sigapp.repository.FicofiuscoRepository;
 import com.finte.sigapp.security.JwtTokenProvider;
 import com.finte.sigapp.service.ContadorAuthService;
@@ -30,14 +31,15 @@ public class ContadorAuthServiceImpl implements ContadorAuthService {
         log.info("Iniciando login para el documento: {}", request.getDocumento());
 
         FicofiuscoEntity usuario = ficofiuscoRepository.findByUSCODOCU(request.getDocumento())
-                .orElseThrow(() -> new UnauthorizedException("Usuario no encontrado"));
+                // .orElseThrow(() -> new UnauthorizedException("Usuario no encontrado"));
+                .orElseThrow(() -> new UnauthorizedException(ErrorCode.SIGAPP_007));
 
         if ("!ac".equalsIgnoreCase(usuario.getUSCOESTA())) {
-            throw new UnauthorizedException("Usuario " + usuario.getUSCOESTA().toLowerCase());
+            throw new UnauthorizedException(ErrorCode.SIGAPP_008);
         }
 
         if (!usuario.getUSCOCODI().equals(request.getCodigoTemporal())) {
-            throw new UnauthorizedException("Codigo temporal incorrecto");
+            throw new UnauthorizedException(ErrorCode.SIGAPP_009);
         }
 
         String accessToken = tokenProvider.generarTokenContador(usuario);
@@ -59,17 +61,17 @@ public class ContadorAuthServiceImpl implements ContadorAuthService {
         log.info("Refresh token contador");
 
         if (!tokenProvider.validarToken(refreshToken)) {
-            throw new UnauthorizedException("Token no valido o expirado");
+            throw new UnauthorizedException(ErrorCode.SIGAPP_402);
         }
         if (!tokenProvider.isRefreshToken(refreshToken)) {
-            throw new UnauthorizedException("Token no es un refresh token");
+            throw new UnauthorizedException(ErrorCode.SIGAPP_403);
         }
 
         String documento = tokenProvider.getUsernameFromJWT(refreshToken);
 
         FicofiuscoEntity usuario = ficofiuscoRepository
                 .findByUSCODOCU(documento)
-                .orElseThrow(() -> new UnauthorizedException("Usuario no encontrado"));
+                .orElseThrow(() -> new UnauthorizedException(ErrorCode.SIGAPP_007));
 
         return AuthResponse.builder()
                 .token(tokenProvider.generarTokenContador(usuario))
