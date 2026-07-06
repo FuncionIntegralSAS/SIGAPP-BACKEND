@@ -13,8 +13,10 @@ import java.util.List;
 public interface BodegaJpaRepository extends JpaRepository<BodegaEntity, BodegaPK> {
 
     @Query(value = """
-            SELECT T.BODECODI,T.BODEEMPR, T.BODEDESC, T.BODEESTA 
-            FROM bodega T 
-            WHERE T.BODEEMPR = :EMPRESA""", nativeQuery = true)
+            SELECT T.BODECODI,T.BODEEMPR, T.BODEDESC, T.BODEESTA
+            FROM bodega T
+            WHERE T.BODEEMPR = :EMPRESA
+              AND T.BODETIBO = 'FI'
+            """, nativeQuery = true)
     List<BodegaEntity> findByBodeEmpr(@Param("EMPRESA") String empresa);
 }
