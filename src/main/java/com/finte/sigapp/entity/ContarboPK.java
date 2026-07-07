@@ -14,6 +14,6 @@ public class ContarboPK implements Serializable {
     private String coabBode;
     private String coabBolo;
     private String coabFech;
-    private String coabArti;
+    private Long coabArti;
     private String coabPlac;
 }

@@ -1,27 +1,19 @@
 package com.finte.sigapp.model;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import lombok.Data;
-import lombok.NoArgsConstructor;
-import java.time.LocalDateTime;
 
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
+@Entity
+@Table(name = "PERSONAL")
 public class PersonalModel {
-    private String persCodi;
-    private String persNomb;
-    private String persApel;
-    private String persTipe;
-    private String persCarg;
-    private String persTele;
-    private String persEmail;
-    private String persDire;
-    private String persEsta;
-    private LocalDateTime persFech;
-    private String persDoid;
-    private String persUsua;
-    private String persDivi;
+    @Id
+    private String perscodi;
+    private String persnomb;
+    private String persapel;
+    private String perscoel;
+    private String persdivi;
+    private String persesta;
 }

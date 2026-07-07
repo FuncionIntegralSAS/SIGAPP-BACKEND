@@ -7,12 +7,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class PersonMapper {
     public PersonResponse toResponse(PersonalModel model) {
-        if (model == null) return null;
+        if (model == null)
+            return null;
         return PersonResponse.builder()
-                .nationalId(model.getPersDoid())
-                .fullName(model.getPersNomb() + " " + model.getPersApel())
-                .isActive("ac".equalsIgnoreCase(model.getPersEsta()))
-                .accountExists(model.getPersUsua() != null)
+                .nombre(model.getPersnomb())
+                .apellido(model.getPersapel())
+                .cedula(model.getPerscodi())
+                .estado(model.getPersesta())
+                .division(model.getPersdivi())
+                .correo(model.getPerscoel())
                 .build();
     }
 }
