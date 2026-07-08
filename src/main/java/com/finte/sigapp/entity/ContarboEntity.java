@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Data
 @NoArgsConstructor
@@ -28,7 +29,7 @@ public class ContarboEntity {
 
     @Id
     @Column(name = "COABFECH")
-    private String coabFech;
+    private LocalDateTime coabFech;
 
     @Id
     @Column(name = "COABARTI", length = 50)
@@ -60,7 +61,7 @@ public class ContarboEntity {
     private BigDecimal coabDind;
 
     @Column(name = "COABFESI")
-    private String coabFesi;
+    private LocalDateTime coabFesi;
 
     @Column(name = "COABDIGI")
     private String coabDigi;
@@ -75,6 +76,6 @@ public class ContarboEntity {
     private BigDecimal coabVaun;
 
     @Column(name = "COABFECI")
-    private String coabFeci;
+    private LocalDateTime coabFeci;
 
 }

@@ -19,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -184,8 +185,9 @@ public class FicofiarasServiceImpl implements FicofiarasService {
 
         Map<Long, FicofiarasEntity> pendientesPorArticulo = obtenerPendientesComoMapa(
                 userId, request.getBodega(), request.getNumeroConteo());
-
+        log.warn("cantidad articulos pendientes {}", pendientesPorArticulo.size());
         if (pendientesPorArticulo.isEmpty()) {
+            log.debug("entro a la excepcion");
             throw new BussinessException(
                     ErrorCode.SIGAPP_002,
                     String.format("Usuario %d no tiene articulos pendientes para el conteo %d en la bodega %s",
@@ -203,6 +205,7 @@ public class FicofiarasServiceImpl implements FicofiarasService {
 
         log.info("reportarConteo OK - {} artículos actualizados", entidadesActualizadas.size());
 
+        asentarEncontarbo(entidadesActualizadas, request.getBodega(), request.getNumeroConteo());
         return ConteoFisicoResponse.builder()
                 .success(true)
                 .message("Conteo " + request.getNumeroConteo() + " reportado exitosamente — "
@@ -261,6 +264,7 @@ public class FicofiarasServiceImpl implements FicofiarasService {
     private List<FicofiarasEntity> aplicarConteoALista(List<ArticuloConteo> articulos,
             Map<Long, FicofiarasEntity> pendientes,
             Integer numeroConteo) {
+
         LocalDateTime now = LocalDateTime.now();
 
         return articulos.stream()
@@ -291,6 +295,86 @@ public class FicofiarasServiceImpl implements FicofiarasService {
             }
         }
         return entity;
+    }
+
+    private void asentarEncontarbo(List<FicofiarasEntity> entidades,
+            String idBodega,
+            Integer numeroConteo) {
+        log.info("asentarEnContarbo ini - {} articulos, conteo: {}", entidades.size(), numeroConteo);
+
+        List<Long> idArticulos = entidades.stream()
+                .map(FicofiarasEntity::getARASIDAR)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        Map<Long, ContarboEntity> contarboMap = contarboRepository
+                .obtenerArticulosOrdenadosContarbo(idBodega)
+                .stream()
+                .collect(Collectors.toMap(ContarboEntity::getCoabArti,
+                        c -> c,
+                        (c1, c2) -> c1));
+
+        List<Long> noEncontrados = idArticulos.stream()
+                .filter(id -> !contarboMap.containsKey(id))
+                .collect(Collectors.toList());
+
+        if (!noEncontrados.isEmpty()) {
+            log.warn("Articulos no encontrdos en contarbo {}", noEncontrados);
+            throw new BussinessException(
+                    ErrorCode.SIGAPP_006,
+                    String.format("Articulos no encontrados en contarbo : %s", noEncontrados.toString()));
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        entidades.forEach(e -> {
+            ContarboEntity contarbo = contarboMap.get(e.getARASIDAR());
+            aplicarCantidad(contarbo, getCantidad(e, numeroConteo), numeroConteo);
+            marcarSincronizacion(e, numeroConteo, now);
+        });
+
+        contarboRepository.saveAll(contarboMap.values().stream()
+                .collect(Collectors.toList()));
+
+        ficofiarasRepository.saveAll(entidades);
+
+        log.info("asentarEnContarbo OK - {} articulos asentados", entidades.size());
+    }
+
+    private void aplicarCantidad(ContarboEntity c, Long cantidad, Integer numeroconteo) {
+        BigDecimal valor = cantidad != null ? BigDecimal.valueOf(cantidad) : null;
+
+        switch (numeroconteo) {
+            case 1 -> c.setCoabCac1(valor);
+            case 2 -> c.setCoabCac2(valor);
+            case 3 -> c.setCoabCac3(valor);
+        }
+    }
+
+    private Long getCantidad(FicofiarasEntity c, Integer numeroConteo) {
+        return switch (numeroConteo) {
+            case 1 -> c.getARASCANT();
+            case 2 -> c.getARASCNT2();
+            case 3 -> c.getARASCNT3();
+            default -> null;
+        };
+    }
+
+    private void marcarSincronizacion(FicofiarasEntity e, Integer numeroConteo, LocalDateTime now) {
+        switch (numeroConteo) {
+            case 1 -> {
+                e.setARASFESI(now);
+                e.setARASSINC("S");
+            }
+            case 2 -> {
+                e.setARASFES2(now);
+                e.setARASSIN2("S");
+            }
+            case 3 -> {
+                e.setARASFES3(now);
+                e.setARASSIN3("S");
+            }
+        }
     }
 
 }
