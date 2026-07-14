@@ -15,4 +15,5 @@ public class PendienteArticuloResponse {
     private String idBodega; // id bodega
     private Long idArticulo; // id artículo
     private Long idUsuario; // id usuario
+    private String descripcion;
 }

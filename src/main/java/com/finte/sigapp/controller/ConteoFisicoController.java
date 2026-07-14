@@ -13,10 +13,12 @@ import com.finte.sigapp.service.FicofiarasService;
 import com.finte.sigapp.security.JwtTokenProvider;
 import org.springframework.web.bind.annotation.RequestHeader;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -73,14 +75,14 @@ public class ConteoFisicoController {
 
     }
 
-    @Operation(summary = "Obtener artículos pendientes", description = "Retorna la lista de artículos pendientes para cache offline.")
+    @Operation(summary = "Obtener artículos pendientes", description = "Retorna la lista de artículos pendientes para cache offline.", security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Lista obtenida", content = @Content(schema = @Schema(implementation = PendienteArticuloResponse.class))),
             @ApiResponse(responseCode = "500", description = "Error interno", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @GetMapping("/pendientes")
     public ResponseEntity<List<PendienteArticuloResponse>> obtenerPendientes(
-            @RequestHeader("Authorization") String bearerToken) throws Exception {
+            @Parameter(hidden = true) @RequestHeader("Authorization") String bearerToken) throws Exception {
 
         String token = tokenProvider.extraerToken(bearerToken);
         Long userId = tokenProvider.extraerIdUsuario(token);
@@ -89,7 +91,7 @@ public class ConteoFisicoController {
         return ResponseEntity.ok(lista);
     }
 
-    @Operation(summary = "Reportar conteo físico", description = "Actualiza la cantidad por articulos del conteo fisico")
+    @Operation(summary = "Reportar conteo físico", description = "Actualiza la cantidad por articulos del conteo fisico", security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Conteo reportado exitosamente", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class))),
             @ApiResponse(responseCode = "403", description = "Usuario no autorizado", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))

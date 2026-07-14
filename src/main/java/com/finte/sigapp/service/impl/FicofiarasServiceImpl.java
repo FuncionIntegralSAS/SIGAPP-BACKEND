@@ -253,7 +253,7 @@ public class FicofiarasServiceImpl implements FicofiarasService {
                 .filter(Objects::nonNull)
                 .filter(id -> !pendientes.containsKey(id))
                 .collect(Collectors.toList());
-
+        log.warn("cantidad articulos no encontrados {}", noEncontrados.size());
         if (!noEncontrados.isEmpty()) {
             // throw new BussinessException("Articulos no encontrados: " + noEncontrados);
             throw new BussinessException(ErrorCode.SIGAPP_002,
