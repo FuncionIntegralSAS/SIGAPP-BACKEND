@@ -3,6 +3,7 @@ package com.finte.sigapp.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finte.sigapp.dto.request.AsignacionConteoRequest;
 import com.finte.sigapp.dto.request.ConteoFisicoRequest;
+import com.finte.sigapp.dto.request.CierreConteoRequest;
 import com.finte.sigapp.dto.response.ConteoFisicoResponse;
 import com.finte.sigapp.security.JwtTokenProvider;
 import com.finte.sigapp.service.ConteoFisicoService;
@@ -41,6 +42,7 @@ class ConteoFisicoControllerTest {
     private static final String BASE_URL = "/api/v1/conteo-fisico";
     private static final String REGISTRAR_URL = BASE_URL + "/registrar";
     private static final String ASIGNAR_URL = BASE_URL + "/asignar_articulos";
+    private static final String CERRAR_URL = BASE_URL + "/cerrar";
 
     @Autowired
     private MockMvc mockMvc;
@@ -165,5 +167,64 @@ class ConteoFisicoControllerTest {
         request.setFecha(LocalDateTime.of(2026, 1, 1, 8, 0));
         request.setVerificarExistencia("N");
         return request;
+    }
+
+    @Test
+    @DisplayName("Debe retornar 200 OK cuando el conteo físico se cierra exitosamente")
+    @Nested
+    void shouldReturnOkWhenCerrarConteoIsSuccessful() throws Exception {
+        // Arrange
+        CierreConteoRequest request = new CierreConteoRequest();
+        request.setBodega("001");
+
+        ConteoFisicoResponse response = ConteoFisicoResponse.builder()
+                .success(true)
+                .message("Se ha cerrado el conteo para la bodega 001 exitosamente.")
+                .build();
+
+        when(conteoFisicoService.cerrarConteo(any(), any()))
+                .thenReturn(response);
+
+        // Act & Assert
+        mockMvc.perform(post(CERRAR_URL)
+                        .header("Authorization", "Bearer token123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message")
+                        .value("Se ha cerrado el conteo para la bodega 001 exitosamente."));
+
+        verify(conteoFisicoService, times(1))
+                .cerrarConteo("Bearer token123", "001");
+    }
+
+    @Test
+    @DisplayName("Debe retornar 400 Bad Request cuando el servicio de cierre falla y retorna success false")
+    @Nested
+    void shouldReturnBadRequestWhenCerrarConteoFails() throws Exception {
+        // Arrange
+        CierreConteoRequest request = new CierreConteoRequest();
+        request.setBodega("001");
+
+        ConteoFisicoResponse response = ConteoFisicoResponse.builder()
+                .success(false)
+                .message("Error al cerrar conteo")
+                .build();
+
+        when(conteoFisicoService.cerrarConteo(any(), any()))
+                .thenReturn(response);
+
+        // Act & Assert
+        mockMvc.perform(post(CERRAR_URL)
+                        .header("Authorization", "Bearer invalid-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message")
+                        .value("Error al cerrar conteo"));
+
+        verify(conteoFisicoService).cerrarConteo("Bearer invalid-token", "001");
     }
 }

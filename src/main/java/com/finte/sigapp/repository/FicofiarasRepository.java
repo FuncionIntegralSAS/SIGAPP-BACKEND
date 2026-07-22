@@ -4,6 +4,7 @@ import com.finte.sigapp.entity.FicofiarasEntity;
 import com.finte.sigapp.entity.FicofiarasEntity2;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -61,5 +62,9 @@ public interface FicofiarasRepository extends JpaRepository<FicofiarasEntity, Lo
       """, nativeQuery = true)
   List<FicofiarasEntity> findByUserBodega(@Param("userId") Long userId,
       @Param("bodega") String bodega);
+
+  @Modifying
+  @Query(value = "UPDATE FI_COFIARAS SET ARASESTA = 'ce', ARASFESI = SYSDATE WHERE ARASIDBO = :bodega AND ARASESTA = 'pe' ", nativeQuery = true)
+  int cerrarConteoPorBodega(@Param("bodega") String bodega);
 
 }

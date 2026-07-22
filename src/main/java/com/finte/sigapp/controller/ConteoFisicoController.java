@@ -7,6 +7,7 @@ import com.finte.sigapp.service.PendienteArticulosService;
 import com.finte.sigapp.dto.request.AsignacionConteoRequest;
 import com.finte.sigapp.dto.request.ConteoFisicoRequest;
 import com.finte.sigapp.dto.request.ReporteConteoRequest;
+import com.finte.sigapp.dto.request.CierreConteoRequest;
 import com.finte.sigapp.dto.response.ConteoFisicoResponse;
 import com.finte.sigapp.service.ConteoFisicoService;
 import com.finte.sigapp.service.FicofiarasService;
@@ -104,5 +105,24 @@ public class ConteoFisicoController {
         Long userId = tokenProvider.extraerIdUsuario(token);
 
         return ResponseEntity.ok(ficofiarasService.reportarConteo(userId, request));
+    }
+
+    @Operation(summary = "Cerrar conteo físico", description = "Cierra un conteo físico para una bodega actualizando su estado", security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Conteo cerrado exitosamente", content = @Content(schema = @Schema(implementation = ConteoFisicoResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Error en la solicitud", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Usuario no autorizado", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping("/cerrar")
+    public ResponseEntity<ConteoFisicoResponse> cerrarConteo(@RequestHeader("Authorization") String bearerToken,
+            @Valid @RequestBody CierreConteoRequest request) {
+
+        ConteoFisicoResponse response = conteoFisicoService.cerrarConteo(bearerToken, request.getBodega());
+
+        if (response.isSuccess()) {
+            return ResponseEntity.ok(response);
+        }
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 }

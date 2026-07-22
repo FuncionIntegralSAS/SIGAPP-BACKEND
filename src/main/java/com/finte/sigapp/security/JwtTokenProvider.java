@@ -36,7 +36,7 @@ public class JwtTokenProvider {
     public String generarToken(String username) {
         return Jwts.builder()
                 .subject(username)
-                // .claim("rol", "ADMIN")
+                // .claim("rol", rol)
                 // .claim("tipo", "access")
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessTokenExpiration))

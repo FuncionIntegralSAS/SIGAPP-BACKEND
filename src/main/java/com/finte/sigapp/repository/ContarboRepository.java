@@ -3,6 +3,7 @@ package com.finte.sigapp.repository;
 import com.finte.sigapp.entity.ContarboEntity;
 import com.finte.sigapp.entity.ContarboPK;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -44,4 +45,8 @@ public interface ContarboRepository extends JpaRepository<ContarboEntity, Contar
       ORDER BY C.COABARTI ASC
         """, nativeQuery = true)
   List<ContarboEntity> obtenerArticulosOrdenadosContarbo(@Param("bodega") String bodega);
+
+  @Modifying
+  @Query(value = "UPDATE CONTARBO SET COABESTA = 'ce', COABFECI = SYSDATE WHERE COABESTA = 'ac' AND COABBODE = :bodega", nativeQuery = true)
+  int cerrarConteoPorBodega(@Param("bodega") String bodega);
 }
