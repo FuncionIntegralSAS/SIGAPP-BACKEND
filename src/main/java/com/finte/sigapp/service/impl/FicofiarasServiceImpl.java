@@ -206,6 +206,7 @@ public class FicofiarasServiceImpl implements FicofiarasService {
         log.info("reportarConteo OK - {} artículos actualizados", entidadesActualizadas.size());
 
         asentarEncontarbo(entidadesActualizadas, request.getBodega(), request.getNumeroConteo());
+
         return ConteoFisicoResponse.builder()
                 .success(true)
                 .message("Conteo " + request.getNumeroConteo() + " reportado exitosamente — "
@@ -333,10 +334,10 @@ public class FicofiarasServiceImpl implements FicofiarasService {
             marcarSincronizacion(e, numeroConteo, now);
         });
 
+        ficofiarasRepository.saveAll(entidades);
+
         contarboRepository.saveAll(contarboMap.values().stream()
                 .collect(Collectors.toList()));
-
-        ficofiarasRepository.saveAll(entidades);
 
         log.info("asentarEnContarbo OK - {} articulos asentados", entidades.size());
     }
