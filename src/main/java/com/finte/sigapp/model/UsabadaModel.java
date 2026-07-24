@@ -1,23 +1,20 @@
 package com.finte.sigapp.model;
 
 import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import java.time.LocalDateTime;
-import java.math.BigDecimal;
+import java.time.LocalDate;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
+@Entity
+@Table(name = "USUABADA")
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class UsabadaModel {
-    private String usbdCodi; // PK: Username
-    private String usbdDesc; // Nombre descriptivo
-    private String usbdCont; // Password (HASH)
-    private String usbdEsta; // Estado
-    private BigDecimal usbdInfa; // Intentos fallidos
-    private LocalDateTime usbdExco; // Expiración contraseña
-    private LocalDateTime usbdCrea; // Fecha creación
-    private String usbdHash; // Token/Hash temporal
+    @Id
+    private String usbdcodi; // PK: Username
+    private String usbddesc; // Nombre descriptivo
+    private String usbdcont; // Password (HASH)
+    private LocalDate usbdexco; // Expiración contraseña
+    private Long usbdinfa; // Intentos fallidos
+    private String usbdesta; // Estado
 }

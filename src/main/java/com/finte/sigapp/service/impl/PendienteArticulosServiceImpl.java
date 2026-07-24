@@ -1,7 +1,6 @@
 package com.finte.sigapp.service.impl;
 
 import com.finte.sigapp.dto.response.PendienteArticuloResponse;
-import com.finte.sigapp.entity.FicofiarasEntity;
 import com.finte.sigapp.entity.FicofiarasEntity2;
 import com.finte.sigapp.repository.FicofiarasRepository;
 import com.finte.sigapp.service.PendienteArticulosService;
@@ -28,7 +27,6 @@ public class PendienteArticulosServiceImpl implements PendienteArticulosService 
         return entidades.stream().map(this::mapToDto).collect(Collectors.toList());
     }
 
-    /** Helper para mapear FicofiarasEntity a PendienteArticuloResponse */
     private PendienteArticuloResponse mapToDto(FicofiarasEntity2 e) {
         PendienteArticuloResponse dto = new PendienteArticuloResponse();
         dto.setNumeroConteo(e.getARASNUCO());

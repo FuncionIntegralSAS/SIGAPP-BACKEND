@@ -23,6 +23,8 @@ public enum ErrorCode {
     SIGAPP_403("SIGAPP_403", "Token invalido"),
     SIGAPP_404("SIGAPP_404", "Recurso no encontrado"),
     SIGAPP_405("SIGAPP_405", "Usuario no autorizado"),
+    SIGAPP_406("SIGAPP_406", "Usuario inactivo"),
+    SIGAPP_407("SIGAPP_407", "Usuario bloqueado"),
     // Errores de infraestructura
     SIGAPP_500("SIGAPP_500", "Error interno del servidor");
 

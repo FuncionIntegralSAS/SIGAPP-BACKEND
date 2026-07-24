@@ -33,11 +33,11 @@ public class JwtTokenProvider {
     @Value("${app.jwt.refresh-token-expiration}")
     private long refreshTokenExpiration;
 
-    public String generarToken(String username) {
+    public String generarToken(String user) {
         return Jwts.builder()
-                .subject(username)
-                // .claim("rol", rol)
-                // .claim("tipo", "access")
+                .subject(user)
+                .claim("rol", "ADMIN")
+                .claim("tipo", "access")
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + accessTokenExpiration))
                 .signWith(getSigningKey())
