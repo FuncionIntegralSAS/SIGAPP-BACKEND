@@ -1,7 +1,7 @@
 package com.finte.sigapp.service.impl;
 
 import com.finte.sigapp.dto.response.PendienteArticuloResponse;
-import com.finte.sigapp.entity.FicofiarasEntity;
+import com.finte.sigapp.entity.FicofiarasEntity2;
 import com.finte.sigapp.repository.FicofiarasRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,7 +29,7 @@ class PendienteArticulosServiceImplTest {
     @DisplayName("obtenerPendientes maps entity fields to DTO correctly")
     void obtenerPendientes_mapsFields() {
         // Arrange: create mock entities
-        FicofiarasEntity e1 = new FicofiarasEntity();
+        FicofiarasEntity2 e1 = new FicofiarasEntity2();
         e1.setARASNUCO(1L);
         e1.setARASCOQR("QR123");
         e1.setARASCANT(100L);
@@ -38,7 +38,7 @@ class PendienteArticulosServiceImplTest {
         e1.setARASIDAR(1L);
         e1.setARASIDUS(10L);
 
-        FicofiarasEntity e2 = new FicofiarasEntity();
+        FicofiarasEntity2 e2 = new FicofiarasEntity2();
         e2.setARASNUCO(2L);
         e2.setARASCOQR("QR456");
         e2.setARASCANT(200L);

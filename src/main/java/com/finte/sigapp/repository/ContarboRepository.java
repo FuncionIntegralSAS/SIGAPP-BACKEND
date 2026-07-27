@@ -47,6 +47,13 @@ public interface ContarboRepository extends JpaRepository<ContarboEntity, Contar
   List<ContarboEntity> obtenerArticulosOrdenadosContarbo(@Param("bodega") String bodega);
 
   @Modifying
-  @Query(value = "UPDATE CONTARBO SET COABESTA = 'ce', COABFECI = SYSDATE WHERE COABESTA = 'ac' AND COABBODE = :bodega", nativeQuery = true)
-  int cerrarConteoPorBodega(@Param("bodega") String bodega);
+  @Query(value = """
+      UPDATE CONTARBO
+         SET COABESTA = 'ce',
+             COABFECI = SYSDATE
+       WHERE COABESTA = 'ac'
+         AND COABBODE = :bodega
+         AND COABEMPR = :empresa
+      """, nativeQuery = true)
+  int cerrarConteoPorBodega(@Param("bodega") String bodega, @Param("empresa") String empresa);
 }

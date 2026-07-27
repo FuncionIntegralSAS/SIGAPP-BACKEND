@@ -117,7 +117,7 @@ public class ConteoFisicoController {
     public ResponseEntity<ConteoFisicoResponse> cerrarConteo(@RequestHeader("Authorization") String bearerToken,
             @Valid @RequestBody CierreConteoRequest request) {
 
-        ConteoFisicoResponse response = conteoFisicoService.cerrarConteo(bearerToken, request.getBodega());
+        ConteoFisicoResponse response = conteoFisicoService.cerrarConteo(bearerToken, request);
 
         if (response.isSuccess()) {
             return ResponseEntity.ok(response);

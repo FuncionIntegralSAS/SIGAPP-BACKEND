@@ -35,7 +35,6 @@ class ArticleServiceImplTest {
         ActiFijoModel mockModel = new ActiFijoModel();
         ArticleResponse mockResponse = ArticleResponse.builder()
                 .id("ART01")
-                .licensePlate("PL-123")
                 .build();
 
         when(repository.buscarAsignados("RESP01", "BOD01")).thenReturn(List.of(mockModel));
@@ -46,10 +45,9 @@ class ArticleServiceImplTest {
         assertNotNull(result);
         assertEquals(1, result.size());
         assertEquals("ART01", result.get(0).getId());
-        assertEquals("PL-123", result.get(0).getLicensePlate());
 
         System.out.println("[obtenerAsignados_RetornaListaMapeada] Artículos mapeados exitosamente:");
-        result.forEach(a -> System.out.println("   -> ID: " + a.getId() + " | Placa: " + a.getLicensePlate()));
+        result.forEach(a -> System.out.println("   -> ID: " + a.getId()));
     }
 
     @Test

@@ -64,7 +64,14 @@ public interface FicofiarasRepository extends JpaRepository<FicofiarasEntity, Lo
       @Param("bodega") String bodega);
 
   @Modifying
-  @Query(value = "UPDATE FI_COFIARAS SET ARASESTA = 'ce', ARASFESI = SYSDATE WHERE ARASIDBO = :bodega AND ARASESTA = 'pe' ", nativeQuery = true)
-  int cerrarConteoPorBodega(@Param("bodega") String bodega);
+  @Query(value = """
+        UPDATE FI_COFIARAS
+           SET ARASESTA = 'ce',
+               ARASFESI = SYSDATE
+         WHERE ARASIDBO = :bodega
+           AND ARASESTA = 'pe'
+           AND ARASEMPR = :empresa
+      """, nativeQuery = true)
+  int cerrarConteoPorBodega(@Param("bodega") String bodega, @Param("empresa") String empresa);
 
 }
