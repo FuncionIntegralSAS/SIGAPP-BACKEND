@@ -55,6 +55,34 @@ public class ProcedureExecutor {
     }
 
     /**
+     * Ejecuta un procedimiento almacenado en Oracle y retorna un Map con los parámetros de salida.
+     *
+     * @param procedureName nombre del procedimiento (ej: "prc_envia_correo_sigapp")
+     * @param params        parámetros de entrada/salida: cada List<ProcedureParam> contiene {nombre, valor, Class<?>, ParameterMode.IN/OUT}
+     * @return Map con los nombres de los parámetros OUT y sus respectivos valores retornados.
+     */
+    public Map<String, Object> ejecutarProcedimientoConSalida(String procedureName, List<ProcedureParam> params) {
+        log.info("Ejecutando procedimiento con salida: {}", procedureName);
+        try {
+            StoredProcedureQuery query = em.createStoredProcedureQuery(procedureName);
+            configurarParametros(query, params);
+            query.execute();
+
+            Map<String, Object> resultados = new HashMap<>();
+            for (ProcedureParam param : params) {
+                if (param.getMode() == ParameterMode.OUT || param.getMode() == ParameterMode.INOUT) {
+                    resultados.put(param.getName(), query.getOutputParameterValue(param.getName()));
+                }
+            }
+            log.info("Procedimiento {} ejecutado correctamente", procedureName);
+            return resultados;
+        } catch (Exception e) {
+            log.error("Error ejecutando procedimiento con salida {}: {}", procedureName, e.getMessage(), e);
+            throw new RuntimeException("Error ejecutando " + procedureName + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Ejecuta una función PL/SQL de Oracle y retorna un valor del tipo genérico
      * 
      * @param functionName nombre de la función (ej: "fun_ValidaBodega")

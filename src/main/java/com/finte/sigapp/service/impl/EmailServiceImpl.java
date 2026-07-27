@@ -19,11 +19,11 @@ public class EmailServiceImpl implements EmailService {
     private final CorreoRepository correoRepository;
 
     @Value("${app.features.envio-correo}")
-
     private boolean envioCorreoHabilitado;
+
     @Override
-    public void enviarCodigoAcceso(List<FicofiuscoEntity> usuarios){
-        if (!envioCorreoHabilitado){
+    public void enviarCodigoAcceso(List<FicofiuscoEntity> usuarios) {
+        if (!envioCorreoHabilitado) {
             log.info("[DEV] envio deshabilitado - {} usuarios omitidos.", usuarios.size());
             return;
         }
@@ -31,20 +31,20 @@ public class EmailServiceImpl implements EmailService {
         usuarios.forEach(this::procesarEnvio);
     }
 
-    private void procesarEnvio(FicofiuscoEntity usuario){
+    private void procesarEnvio(FicofiuscoEntity usuario) {
         try {
             ProcedureResultResponse resultado = correoRepository
                     .enviarCodigo(usuario.getUSCOEMAI(), usuario.getUSCOCODI());
 
-            if (resultado.getErrorId() == 0L){
+            if (resultado.getErrorId() == 0L) {
                 log.info("Correo enviado a '{}'", usuario.getUSCOEMAI());
-            }else{
+            } else {
                 log.warn("Oracle reportó fallo para '{}': {}",
                         usuario.getUSCOEMAI(), resultado.getErrorLog());
             }
-        }catch (Exception e){
+        } catch (Exception e) {
             log.error("Error técnico enviando correo a '{}' : {}",
-                    usuario.getUSCOEMAI(), e.getMessage(),e);
+                    usuario.getUSCOEMAI(), e.getMessage(), e);
         }
     }
 }
