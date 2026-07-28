@@ -2,6 +2,7 @@ package com.finte.sigapp.service.impl;
 
 import com.finte.sigapp.dto.response.BodegaDtoResponse;
 import com.finte.sigapp.dto.response.BodegaResponse;
+import com.finte.sigapp.dto.response.BodegasConteoPendientes;
 import com.finte.sigapp.entity.BodegaEntity;
 import com.finte.sigapp.model.BodegaModel;
 import com.finte.sigapp.repository.BodegaJpaRepository;
@@ -31,6 +32,20 @@ public class BodegaServiceImpl implements BodegaService {
         return repository.buscarPorDivision(divisionId).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<BodegasConteoPendientes> bodegasConteoPendientes(String empresa) {
+        return bodegaJpaRepository.findBodegasConteoActivo(empresa).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    private BodegasConteoPendientes mapToResponse(BodegaEntity entity) {
+        return BodegasConteoPendientes.builder()
+                .bodega(entity.getBodeCodi())
+                .descripcion(entity.getBodeDesc())
+                .build();
     }
 
     private BodegaDtoResponse mapToDtoResponse(BodegaEntity entity) {

@@ -2,6 +2,7 @@ package com.finte.sigapp.controller;
 
 import com.finte.sigapp.dto.response.BodegaDtoResponse;
 import com.finte.sigapp.dto.response.BodegaResponse;
+import com.finte.sigapp.dto.response.BodegasConteoPendientes;
 import com.finte.sigapp.service.BodegaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -39,6 +40,21 @@ public class BodegaController {
     @ApiResponse(responseCode = "204", description = "No se encontraron bodegas para la división proporcionada")
     public ResponseEntity<List<BodegaResponse>> getByDivision(@PathVariable String divisionId) {
         List<BodegaResponse> bodegas = bodegaService.buscarPorDivision(divisionId);
+
+        if (bodegas.isEmpty()) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(bodegas);
+    }
+
+    // GET /api/v1/bodegas/conteo-pendientes/{empresa}
+    @GetMapping("/conteo-pendientes/{empresa}")
+    @Operation(summary = "Obtener bodegas con conteo pendiente", description = "Retorna una lista de bodegas que tienen conteo pendiente")
+    @ApiResponse(responseCode = "200", description = "Lista de bodegas encontrada")
+    @ApiResponse(responseCode = "204", description = "No se encontraron bodegas con conteo pendiente")
+    public ResponseEntity<List<BodegasConteoPendientes>> getBodegasConteoPendientes(
+            @PathVariable String empresa) {
+        List<BodegasConteoPendientes> bodegas = bodegaService.bodegasConteoPendientes(empresa);
 
         if (bodegas.isEmpty()) {
             return ResponseEntity.noContent().build();

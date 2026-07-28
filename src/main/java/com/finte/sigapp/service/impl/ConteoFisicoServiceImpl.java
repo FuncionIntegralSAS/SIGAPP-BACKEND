@@ -2,6 +2,7 @@ package com.finte.sigapp.service.impl;
 
 import com.finte.sigapp.dto.request.CierreConteoRequest;
 import com.finte.sigapp.dto.request.ConteoFisicoRequest;
+import com.finte.sigapp.dto.response.BodegasConteoPendientes;
 import com.finte.sigapp.dto.response.ConteoFisicoResponse;
 import com.finte.sigapp.repository.ConteoFisicoRepository;
 import com.finte.sigapp.repository.ContarboRepository;
@@ -13,6 +14,9 @@ import com.finte.sigapp.exception.UnauthorizedException;
 import com.finte.sigapp.exception.catalog.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
