@@ -24,7 +24,7 @@ public interface BodegaJpaRepository extends JpaRepository<BodegaEntity, BodegaP
       SELECT T.BODECODI, T.BODEEMPR, T.BODEDESC, T.BODEESTA
         FROM BODEGA T
         JOIN CONTARBO C
-          ON T.BODEEMPR = C.COABDIEM
+          ON T.BODEEMPR = C.COABEMPR
          AND T.BODECODI = C.COABBODE
        WHERE T.BODEEMPR = :empresa
          AND T.BODETIBO = 'FI'
