@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvnw.cmd clean compile:*)",
+      "Bash(./mvnw clean:*)",
+      "Bash(echo:*)",
+      "Bash(./mvnw spring-boot:run:*)",
+      "Bash(taskkill //F //PID 31648)",
+      "Bash(curl:*)"
+    ]
+  }
+}

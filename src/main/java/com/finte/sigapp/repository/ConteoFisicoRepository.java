@@ -1,14 +1,11 @@
 package com.finte.sigapp.repository;
 
-import com.finte.sigapp.dto.response.BodegasConteoPendientes;
 import com.finte.sigapp.utils.ProcedureExecutor;
 import com.finte.sigapp.utils.ProcedureParam;
 import jakarta.persistence.ParameterMode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -23,8 +20,8 @@ public class ConteoFisicoRepository {
     private final ProcedureExecutor procedureExecutor;
 
     /**
-     * Llama al procedimiento PL/SQL PKGCONTARBO.proGeneContFisi para generar el
-     * conteo físico.
+     * Llama al procedimiento PL/SQL PKGCONTARBO.proGeneContFisi
+     * para generar el conteo físico.
      */
     public void generarConteoFisico(String empresa,
             String bodega,
@@ -37,7 +34,7 @@ public class ConteoFisicoRepository {
                 "Llamando a proGeneContFisi - Empresa: {}, Bodega: {}, Bodega Lógica: {} Artículo: {}, Fecha: {}, Verificar Existencia: {}",
                 empresa, bodega, bodegaLogica, articulo, fecha, verificarExistencia);
 
-        // seteo parametros del procedimiento
+        // seteo parámetros del procedimiento
         List<ProcedureParam> params = List.of(
                 new ProcedureParam("P_sbEmpr", ParameterMode.IN, String.class, empresa),
                 new ProcedureParam("P_sbBode", ParameterMode.IN, String.class, bodega),
@@ -51,8 +48,7 @@ public class ConteoFisicoRepository {
 
     /**
      * Invoca la función PL/SQL PKGCONTARBO.fun_ValidaBodega para verificar si la
-     * bodega
-     * ya se encuentra en conteo físico.
+     * bodega ya se encuentra en conteo físico.
      *
      * @return true si la bodega ya está en conteo, false si no lo está.
      */
