@@ -1,2 +1,12 @@
 /mvnw text eol=lf
 *.cmd text eol=crlf
+
+# Archivos que consume Linux/Docker: forzar LF.
+# Con CRLF, las continuaciones "\" de los RUN del Dockerfile se rompen
+# porque el \r llega al shell del contenedor.
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+.env.example text eol=lf

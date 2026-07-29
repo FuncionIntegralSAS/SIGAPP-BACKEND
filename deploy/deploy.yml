@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sigapp-backend
+  namespace: ns-sigapp-dev
+  labels:
+    app: sigapp-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sigapp-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: sigapp-backend
+    spec:
+      # Necesario si el paquete en GHCR es privado:
+      #   kubectl -n ns-sigapp-dev create secret docker-registry ghcr-pull \
+      #     --docker-server=ghcr.io --docker-username=USUARIO --docker-password=TOKEN
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: sigapp-backend
+          # Etiquetar siempre con version o SHA; "latest" impide rollback.
+          image: ghcr.io/funcionintegralsas/sigapp-backend:0.0.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8082
+          envFrom:
+            - configMapRef:
+                name: config-sigapp-backend
+            - secretRef:
+                name: secret-sigapp-backend
+          # Startup: da hasta 150s (30 x 5s) para el arranque de Spring + pool Oracle.
+          # Mientras corre, liveness y readiness quedan suspendidas.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              # Sin limite de CPU a proposito: el throttling degrada el arranque de la JVM.
+              memory: "1Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      # readOnlyRootFilesystem exige /tmp escribible (Tomcat lo necesita).
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      terminationGracePeriodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sigapp-backend
+  namespace: ns-sigapp-dev
+  labels:
+    app: sigapp-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: sigapp-backend
+  ports:
+    - name: http
+      port: 8082
+      targetPort: http

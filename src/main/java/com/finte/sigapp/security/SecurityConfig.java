@@ -39,6 +39,12 @@ public class SecurityConfig {
         } else {
             http.authorizeHttpRequests(auth -> auth
                     .requestMatchers("/api/v1/auth/**", "/api/v1/health/**").permitAll()
+                    // Probes de Kubernetes: el kubelet no envia token JWT.
+                    .requestMatchers(
+                            "/actuator/health",
+                            "/actuator/health/liveness",
+                            "/actuator/health/readiness")
+                    .permitAll()
                     .requestMatchers(
                             "/swagger-ui/**",
                             "/swagger-ui.html",

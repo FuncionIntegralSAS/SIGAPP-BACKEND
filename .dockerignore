@@ -1,0 +1,32 @@
+# Build artifacts
+target/
+build/
+
+# Control de versiones
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+SigoAPP.iml
+
+# Manifiestos y pruebas: no van dentro de la imagen
+deploy/
+stress-tests/
+*.postman_collection.json
+
+# Secretos: nunca deben entrar al build context
+.env
+.env.*
+!.env.example
+
+# Docs y temporales
+*.md
+HELP.md
+%TEMP%*
+.claude/

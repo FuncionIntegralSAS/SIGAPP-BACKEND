@@ -5,6 +5,12 @@ target/
 !**/src/test/**/target/
 deploy/secret.yml
 
+### Secretos / variables de entorno ###
+.env
+.env.local
+.env.*
+!.env.example
+
 ### STS ###
 .apt_generated
 .classpath

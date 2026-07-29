@@ -1,0 +1,14 @@
+# Configuracion NO sensible. Lo sensible va en secret.yml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config-sigapp-backend
+  namespace: ns-sigapp-dev
+data:
+  SERVER_PORT: "8082"
+  TZ: "America/Bogota"
+  # Nunca "true" fuera de local: desactiva toda la seguridad.
+  SECURITY_DEVELOPER_MODE: "false"
+  APP_FEATURES_ENVIO_CORREO: "false"
+  JWT_ACCESS_TOKEN_EXPIRATION: "28800000"
+  JWT_REFRESH_TOKEN_EXPIRATION: "86400000"
