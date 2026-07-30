@@ -16,10 +16,6 @@ public interface RoleformRepository extends JpaRepository<RoleformEntity, Rolefo
   /**
    * Permisos de formas del usuario: los asignados directamente (ROFOTIRO = 'U')
    * y los heredados de los roles a los que pertenece.
-   *
-   * La comparacion contra :usuario usa UPPER(TRIM(...)) porque las columnas CHAR
-   * de ROLEFORM llegan con blank padding y el driver JDBC bindea como VARCHAR2,
-   * lo que hace que la comparacion sea non-padded y no encuentre coincidencias.
    */
   @Query(value = """
       SELECT RF.ROFOROLE,
