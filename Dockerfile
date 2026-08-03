@@ -18,6 +18,13 @@ RUN mvn clean package -DskipTests -B
 # ---------- Etapa 2: runtime ----------
 FROM eclipse-temurin:17-jre-jammy
 
+# image.source vincula el paquete publicado en GHCR con este repositorio: sin el
+# label, el paquete queda suelto y hay que administrarle los permisos aparte.
+LABEL org.opencontainers.image.source="https://github.com/FuncionIntegralSAS/SIGAPP-BACKEND" \
+      org.opencontainers.image.title="SIGAPP Backend" \
+      org.opencontainers.image.description="Microservicio REST del modulo Conteo Fisico Movil" \
+      org.opencontainers.image.licenses="UNLICENSED"
+
 # Zona horaria Colombia: las fechas de conteo (FI_COFIARAS) deben
 # coincidir con la hora del ERP, no con UTC.
 ENV TZ=America/Bogota \
