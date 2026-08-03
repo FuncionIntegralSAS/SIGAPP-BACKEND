@@ -20,11 +20,12 @@ spec:
       labels:
         app: sigapp-backend
     spec:
-      # Necesario si el paquete en GHCR es privado:
-      #   kubectl -n ns-sigapp-dev create secret docker-registry ghcr-pull \
-      #     --docker-server=ghcr.io --docker-username=USUARIO --docker-password=TOKEN
+      # El repositorio en Docker Hub es privado, asi que el pull secret es obligatorio:
+      #   kubectl -n ns-sigapp-dev create secret docker-registry dockerhub-pull \
+      #     --docker-server=https://index.docker.io/v1/ \
+      #     --docker-username=USUARIO --docker-password=TOKEN
       imagePullSecrets:
-        - name: ghcr-pull
+        - name: dockerhub-pull
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
@@ -32,7 +33,7 @@ spec:
       containers:
         - name: sigapp-backend
           # Etiquetar siempre con version o SHA; "latest" impide rollback.
-          image: ghcr.io/funcionintegralsas/sigapp-backend:0.0.1
+          image: funcionintegralsas/sigapp-backend:0.0.1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
