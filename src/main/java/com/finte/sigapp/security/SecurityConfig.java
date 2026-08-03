@@ -35,7 +35,12 @@ public class SecurityConfig {
             "/v3/api-docs/**",
             "/v3/api-docs.yaml",
             "/api/v1/auth/**",
-            "/api/v1/health/**"
+            "/api/v1/health/**",
+            // Probes de Kubernetes: el kubelet no envia token JWT. Sin estas rutas
+            // abiertas las probes reciben 401 y el pod nunca llega a Ready.
+            "/actuator/health",
+            "/actuator/health/liveness",
+            "/actuator/health/readiness"
     };
 
     @Bean
@@ -48,7 +53,6 @@ public class SecurityConfig {
             http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         } else {
             http.authorizeHttpRequests(auth -> auth
-                    // Probes de Kubernetes: el kubelet no envia token JWT.
                     .requestMatchers(PUBLIC_ENDPOINTS)
                     .permitAll()
                     .anyRequest().authenticated());
