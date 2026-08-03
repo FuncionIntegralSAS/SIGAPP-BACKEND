@@ -53,7 +53,9 @@ public class LoginServiceImpl implements LoginService {
         log.info("Login exitoso para usuario: {}. Total permisos: {}", usuario.getUsbdcodi(), permisos.size());
 
         return AuthResponse.builder()
-                .token("Bearer " + token)
+                // Sin prefijo: el esquema va en 'type' y el cliente arma el header.
+                // Igual que ContadorAuthServiceImpl, para que ambos logins devuelvan lo mismo.
+                .token(token)
                 .type("Bearer")
                 .username(request.getUsername())
                 .expiresIn(100000)

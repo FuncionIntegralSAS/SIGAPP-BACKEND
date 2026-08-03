@@ -31,8 +31,7 @@ public class TransferServiceImpl implements TransferService {
                 request.getPlaca(),
                 request.getPersonaDestino(),
                 request.getObservacion(),
-                usuarioCrea
-        );
+                usuarioCrea);
 
         if (idGenerado == null) {
             throw new RuntimeException("La solicitud se procesó pero no retornó ID.");
@@ -89,7 +88,6 @@ public class TransferServiceImpl implements TransferService {
                 idTramite,
                 request.getEstado(),
                 request.getObservacion(),
-                usuarioActualiza
-        );
+                usuarioActualiza);
     }
 }

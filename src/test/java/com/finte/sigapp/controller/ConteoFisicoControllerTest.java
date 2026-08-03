@@ -8,9 +8,9 @@ import com.finte.sigapp.dto.response.ConteoFisicoResponse;
 import com.finte.sigapp.security.JwtTokenProvider;
 import com.finte.sigapp.service.ConteoFisicoService;
 import com.finte.sigapp.service.FicofiarasService;
+import com.finte.sigapp.service.PendienteArticulosService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.shadow.com.univocity.parsers.annotations.Nested;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -54,11 +54,13 @@ class ConteoFisicoControllerTest {
         private FicofiarasService ficofiarasService;
 
         @MockitoBean
+        private PendienteArticulosService pendienteArticulosService;
+
+        @MockitoBean
         private JwtTokenProvider jwtTokenProvider;
 
         @Test
         @DisplayName("Debe retornar 200 OK cuando el conteo físico se registra exitosamente")
-        @Nested
         void shouldReturnOkWhenRegistrarConteoIsSuccessful() throws Exception {
                 // Arrange
                 ConteoFisicoRequest request = buildValidConteoFisicoRequest();
@@ -86,7 +88,6 @@ class ConteoFisicoControllerTest {
 
         @Test
         @DisplayName("Debe retornar 400 Bad Request cuando el servicio indica error")
-        @Nested
         void shouldReturnBadRequestWhenRegistrarConteoFails() throws Exception {
                 // Arrange
                 ConteoFisicoRequest request = buildValidConteoFisicoRequest();
@@ -113,7 +114,6 @@ class ConteoFisicoControllerTest {
 
         @Test
         @DisplayName("Debe retornar 200 OK cuando se asignan artículos correctamente")
-        @Nested
         void shouldReturnOkWhenAsignarArticulosIsSuccessful() throws Exception {
                 // Arrange
                 AsignacionConteoRequest request = new AsignacionConteoRequest();
@@ -132,7 +132,6 @@ class ConteoFisicoControllerTest {
 
         @Test
         @DisplayName("Debe enviar al servicio el mismo request recibido")
-        @Nested
         void shouldPassRequestToFicofiarasService() throws Exception {
                 // Arrange
                 AsignacionConteoRequest request = new AsignacionConteoRequest();
@@ -165,13 +164,18 @@ class ConteoFisicoControllerTest {
                 return request;
         }
 
-        @Test
-        @DisplayName("Debe retornar 200 OK cuando el conteo físico se cierra exitosamente")
-        @Nested
-        void shouldReturnOkWhenCerrarConteoIsSuccessful() throws Exception {
-                // Arrange
+        private CierreConteoRequest buildValidCierreConteoRequest() {
                 CierreConteoRequest request = new CierreConteoRequest();
                 request.setBodega("001");
+                request.setEmpresa("01");
+                return request;
+        }
+
+        @Test
+        @DisplayName("Debe retornar 200 OK cuando el conteo físico se cierra exitosamente")
+        void shouldReturnOkWhenCerrarConteoIsSuccessful() throws Exception {
+                // Arrange
+                CierreConteoRequest request = buildValidCierreConteoRequest();
 
                 ConteoFisicoResponse response = ConteoFisicoResponse.builder()
                                 .success(true)
@@ -198,11 +202,9 @@ class ConteoFisicoControllerTest {
 
         @Test
         @DisplayName("Debe retornar 400 Bad Request cuando el servicio de cierre falla y retorna success false")
-        @Nested
         void shouldReturnBadRequestWhenCerrarConteoFails() throws Exception {
                 // Arrange
-                CierreConteoRequest request = new CierreConteoRequest();
-                request.setBodega("001");
+                CierreConteoRequest request = buildValidCierreConteoRequest();
 
                 ConteoFisicoResponse response = ConteoFisicoResponse.builder()
                                 .success(false)

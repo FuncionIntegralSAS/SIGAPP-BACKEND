@@ -66,7 +66,14 @@ class BodegaServiceImplTest {
 
     @Test
     void buscarTodas_RetornaListaMapeada() {
-        BodegaEntity mockEntity = new BodegaEntity("BOD02", "Bodega Norte", "AC", "EMP01");
+        // Con setters y no con el constructor posicional: BodegaEntity tiene PK
+        // compuesta (bodeEmpr + bodeCodi) y cualquier campo nuevo desplazaria los
+        // argumentos sin que el compilador avise.
+        BodegaEntity mockEntity = new BodegaEntity();
+        mockEntity.setBodeEmpr("EMP01");
+        mockEntity.setBodeCodi("BOD02");
+        mockEntity.setBodeDesc("Bodega Norte");
+        mockEntity.setBodeEsta("AC");
 
         when(bodegaJpaRepository.findByBodeEmpr("EMP01")).thenReturn(List.of(mockEntity));
 

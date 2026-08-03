@@ -24,9 +24,19 @@ import io.swagger.v3.oas.annotations.security.SecurityScheme;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
+    private final JwtAuthenticationEntryPoint jwtEntryPoint;
 
     @org.springframework.beans.factory.annotation.Value("${security.developer-mode}")
     private boolean developerMode;
+
+    private static final String[] PUBLIC_ENDPOINTS = {
+            "/swagger-ui/**",
+            "/swagger-ui.html",
+            "/v3/api-docs/**",
+            "/v3/api-docs.yaml",
+            "/api/v1/auth/**",
+            "/api/v1/health/**"
+    };
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -38,21 +48,12 @@ public class SecurityConfig {
             http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         } else {
             http.authorizeHttpRequests(auth -> auth
-                    .requestMatchers("/api/v1/auth/**", "/api/v1/health/**").permitAll()
                     // Probes de Kubernetes: el kubelet no envia token JWT.
-                    .requestMatchers(
-                            "/actuator/health",
-                            "/actuator/health/liveness",
-                            "/actuator/health/readiness")
-                    .permitAll()
-                    .requestMatchers(
-                            "/swagger-ui/**",
-                            "/swagger-ui.html",
-                            "/v3/api-docs/**",
-                            "/v3/api-docs.yaml",
-                            "/webjars/**")
+                    .requestMatchers(PUBLIC_ENDPOINTS)
                     .permitAll()
                     .anyRequest().authenticated());
+            // Sin entry point propio Spring devuelve 403 vacio para todo rechazo.
+            http.exceptionHandling(ex -> ex.authenticationEntryPoint(jwtEntryPoint));
             http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         }
 

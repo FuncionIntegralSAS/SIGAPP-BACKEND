@@ -111,18 +111,35 @@ public class JwtTokenProvider {
         return "refresh".equals(getClaimFrowJWT(token, "tipo"));
     }
 
+    /**
+     * Solo los tokens marcados como "access" sirven para consumir las APIs. Se
+     * exige el claim explicito (y no "que no sea refresh") para que un token sin
+     * el claim tipo tampoco pase.
+     */
+    public boolean isAccessToken(String token) {
+        return "access".equals(getClaimFrowJWT(token, "tipo"));
+    }
+
     public boolean validarToken(String token) {
+        return diagnosticarToken(token) == null;
+    }
+
+    /**
+     * Devuelve el ErrorCode que explica por que el token no sirve, o null si es
+     * valido. Permite al filtro distinguir "expirado" de "invalido" para que la
+     * app movil sepa si debe renovar el token o volver a autenticarse.
+     */
+    public ErrorCode diagnosticarToken(String token) {
         try {
             extraerClaims(token);
-            return true;
+            return null;
         } catch (ExpiredJwtException e) {
             log.warn("Token expirado: {}", e.getMessage());
-        } catch (JwtException e) {
+            return ErrorCode.SIGAPP_402;
+        } catch (JwtException | IllegalArgumentException e) {
             log.warn("Token invalido {}", e.getMessage());
-        } catch (IllegalArgumentException e) {
-            log.warn("Token invalido {}", e.getMessage());
+            return ErrorCode.SIGAPP_403;
         }
-        return false;
     }
 
     public String extraerToken(String bearerToken) {
