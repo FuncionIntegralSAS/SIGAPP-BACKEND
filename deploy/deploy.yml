@@ -33,7 +33,7 @@ spec:
       containers:
         - name: sigapp-backend
           # Etiquetar siempre con version o SHA; "latest" impide rollback.
-          image: funcionintegralsas/sigapp-backend:0.0.1
+          image: finte2026/sigapp-backend:0.0.1
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
