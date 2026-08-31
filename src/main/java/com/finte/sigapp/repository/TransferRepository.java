@@ -1,122 +1,174 @@
 package com.finte.sigapp.repository;
 
-import com.finte.sigapp.model.SigappTraspasoModel;
+import com.finte.sigapp.dto.response.TransferCreatedResponse;
+import com.finte.sigapp.utils.ProcedureExecutor;
+import com.finte.sigapp.utils.ProcedureParam;
+import jakarta.persistence.ParameterMode;
 import lombok.RequiredArgsConstructor;
-import org.springframework.jdbc.core.BeanPropertyRowMapper;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.core.simple.SimpleJdbcCall;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
-import javax.sql.DataSource;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Procedimientos PL/SQL del paquete PKG_FI_MOVITRAS.
+ *
+ * El ciclo completo del tramite (crear, aprobar/rechazar, firmar, recibir) vive
+ * en PL/SQL: es ahi donde se resuelven, contra los parametros del sistema
+ * (FunBuscPara), los tipos de movimiento con los que se inserta en el ERP, y
+ * donde se crea el documento REQUSUMI del que cuelga el traspaso. Java solo
+ * orquesta y valida lo que puede validar sin conocer esa configuracion.
+ *
+ * Las consultas de lectura viven en {@link TransferJpaRepository} y
+ * {@link MovitrasRepository}.
+ */
+@Slf4j
 @Repository
 @RequiredArgsConstructor
 public class TransferRepository {
 
-    private final NamedParameterJdbcTemplate namedJdbcTemplate;
-    private final DataSource dataSource;
+        private static final String PAQUETE = "PKG_FI_MOVITRAS";
+        private static final String PARAM_ID_TRAMITE = "p_motridmt";
+        private static final String PARAM_TIPO_DOCU = "p_motrdrtd";
+        private static final String PARAM_NUME_DOCU = "p_motrdrnd";
 
-    // 1. Métod  para CREAR (Llama al SP)
-    public String llamarProcedimientoCrear(
-            String empresa,
-            String tipoMov,
-            String articulo,
-            String placa,
-            String personaDestino,
-            String observacion,
-            String usuarioCrea
-    ) {
-        SimpleJdbcCall jdbcCall = new SimpleJdbcCall(dataSource)
-                .withCatalogName("PKGFISIGAPPTRASPASO")      // Nombre del Paquete
-                .withProcedureName("prc_crear_solicitud") // Nombre del Procedimiento
-                .withReturnValue(); // Indica que esperamos parámetros de salida
+        public static final String FIRMA_FUENTE = "FU";
+        public static final String FIRMA_DESTINO = "DE";
 
-        // Mapeo exacto de argumentos del SP
-        MapSqlParameterSource inParams = new MapSqlParameterSource()
-                .addValue("p_sitrempr",empresa)
-                .addValue("p_sitrtimo",tipoMov)
-                .addValue("p_sitrarti",articulo)
-                .addValue("p_sitrplac",placa)
-                .addValue("p_sitrpede",personaDestino)
-                .addValue("p_sitrobse",observacion)
-                .addValue("p_sitrdirc",usuarioCrea);
+        private final ProcedureExecutor procedureExecutor;
 
-        // Ejecución
-        Map<String,Object> out = jdbcCall.execute(inParams);
+        /**
+         * Invoca PKG_FI_MOVITRAS.pro_crear_solicitud, que inserta primero la
+         * requisicion en REQUSUMI y despues el traspaso en FI_MOVITRAS.
+         *
+         * @param tipoMovimiento opcional. Si llega null el procedimiento resuelve el
+         *                       tipo de documento con FunBuscPara('TIDO_TRASPASO').
+         * @return id del traspaso y llave del documento generado
+         */
+        public TransferCreatedResponse crearSolicitud(String empresa,
+                                                      String personaFuente,
+                                                      String personaDestino,
+                                                      String elemento,
+                                                      String placa,
+                                                      String observacion,
+                                                      String tipoMovimiento,
+                                                      String usuarioCrea) {
 
-        // Recuperar ID de retorno (Asumiendo que el SP devuelve 'p_id_retorno')
-        Object resultado = out.get("p_sitridtr");
+                log.info("Creando traspaso - Empresa: {}, Elemento: {}, Placa: {}, Persona fuente: {}, Persona destino: {}",
+                          empresa, elemento, placa, personaFuente, personaDestino);
 
-        return resultado != null ? resultado.toString() : null;
-    }
+                List<ProcedureParam> params = List.of(new ProcedureParam("p_motrdrem", ParameterMode.IN, String.class, empresa),
+                                                      new ProcedureParam("p_motrpefu", ParameterMode.IN, String.class, personaFuente),
+                                                      new ProcedureParam("p_motrpede", ParameterMode.IN, String.class, personaDestino),
+                                                      new ProcedureParam("p_motrarti", ParameterMode.IN, String.class, elemento),
+                                                      new ProcedureParam("p_motrplac", ParameterMode.IN, String.class, placa),
+                                                      new ProcedureParam("p_motrobse", ParameterMode.IN, String.class, observacion),
+                                                      new ProcedureParam("p_tipo_movi", ParameterMode.IN, String.class, tipoMovimiento),
+                                                      new ProcedureParam("p_motruscr", ParameterMode.IN, String.class, usuarioCrea),
+                                                      new ProcedureParam(PARAM_ID_TRAMITE, ParameterMode.OUT, Long.class, null),
+                                                      new ProcedureParam(PARAM_TIPO_DOCU, ParameterMode.OUT, String.class, null),
+                                                      new ProcedureParam(PARAM_NUME_DOCU, ParameterMode.OUT, BigDecimal.class, null));
 
-    public List<SigappTraspasoModel> listarPorBodegaYEstados(String bodegaOrigen,List<String> estados) {
-        // Tu lógica exacta llevada a SQL puro
-        String sql = """
-            SELECT
-                t.TRAS_ID as trasId,
-                t.SITRARTI as trasArti,
-                t.TRAS_MOTI as trasMoti,
-                t.TRAS_FECH as trasFech,
-                t.TRAS_ESTA as trasEsta,
-                t.TRAS_RECH as trasRech,
+                Map<String, Object> resultado = procedureExecutor.ejecutarProcedimientoConSalida(PAQUETE + ".pro_crear_solicitud", params);
 
-                (SELECT MAX(p.PERSCODI || ' - ' || p.PERSNOMB || ' ' || p.PERSAPEL)
-                   FROM ACTIFIJO a
-                   JOIN SRF_PERSONAL p ON p.PERSCODI = a.ACFIPERS
-                  WHERE a.ACFIPLAC = t.SITRPLAC AND a.ACFIARTI = t.SITRARTI) as personaFuenteDesc,
+                Object idTramite = resultado.get(PARAM_ID_TRAMITE);
 
-                (SELECT MAX(b.BODECODI || ' - ' || b.BODEDESC)
-                   FROM ACTIFIJO a
-                   JOIN SRF_PERSONAL p ON p.PERSCODI = a.ACFIPERS
-                   JOIN SRF_BODEGA b ON b.BODEDIVI = p.PERSDIVI AND b.BODETIBO = 'PE'
-                  WHERE a.ACFIPLAC = t.SITRPLAC AND a.ACFIARTI = t.SITRARTI) as bodegaFuenteDesc,
+                if (idTramite == null) {
+                        return null;
+                }
 
-                (SELECT MAX(b.BODECODI || ' - ' || b.BODEDESC)
-                   FROM SRF_PERSONAL p
-                   JOIN SRF_BODEGA b ON b.BODEDIVI = p.PERSDIVI AND b.BODETIBO = 'PE'
-                  WHERE p.PERSCODI = t.SITRPEDE) as bodegaDestinoDesc,
+                return TransferCreatedResponse.builder()
+                                .id(((Number) idTramite).longValue())
+                                .empresaDocumento(empresa)
+                                .tipoDocumento((String) resultado.get(PARAM_TIPO_DOCU))
+                                .numeroDocumento(aBigDecimal(resultado.get(PARAM_NUME_DOCU)))
+                                .build();
+        }
 
-                (SELECT p.PERSCODI || ' - ' || p.PERSNOMB || ' ' || p.PERSAPEL
-                   FROM SRF_PERSONAL p
-                  WHERE p.PERSCODI = t.SITRPEDE) as personaDestinoDesc
+        /**
+         * Invoca PKG_FI_MOVITRAS.pro_aprobar_rechazar. El procedimiento valida que el
+         * traspaso este en estado 'pe' y sincroniza el estado del documento REQUSUMI.
+         *
+         * <p>
+         * Al aprobar genera ademas el documento de inventario del ERP (cabecera en
+         * DOCUINVE y su linea de detalle en MOVIINVE), todo dentro de la misma
+         * transaccion. Al rechazar no se inserta nada: el documento se anula.
+         *
+         * @param estado nuevo estado: 'ap' (aprobado) o 'na' (rechazado)
+         */
+        public void aprobarRechazar(Long idTramite,
+                                    String estado,
+                                    String observacion,
+                                    String usuarioActualiza) {
 
-              FROM SRF_FI_SIGATRAS t
-             WHERE t.TRAS_BODE_ORI = :bodega
-               AND t.TRAS_ESTA IN (:estados)
-             ORDER BY t.TRAS_FECH DESC
-        """;
+                log.info("Procesando traspaso {} con estado {}", idTramite, estado);
 
-        MapSqlParameterSource params = new MapSqlParameterSource()
-                .addValue("bodega",bodegaOrigen)
-                .addValue("estados",estados);
+                List<ProcedureParam> params = List.of(new ProcedureParam(PARAM_ID_TRAMITE, ParameterMode.IN, Long.class, idTramite),
+                                                      new ProcedureParam("p_estado_nvo", ParameterMode.IN, String.class, estado),
+                                                      new ProcedureParam("p_observa", ParameterMode.IN, String.class, observacion),
+                                                      new ProcedureParam("p_usuario", ParameterMode.IN, String.class, usuarioActualiza));
 
-        return namedJdbcTemplate.query(
-                sql,
-                params,
-                new BeanPropertyRowMapper<>(SigappTraspasoModel.class)
-        );
-    }
+                procedureExecutor.ejecutarProcedimiento(PAQUETE + ".pro_aprobar_rechazar", params);
+        }
 
-    // 3. Mét odo para APROBAR / RECHAZAR
-    public void callApproveRejectProcedure(
-            Long idTramite,
-            String estado,
-            String observacion,
-            String usuarioActualiza
-    ) {
-        SimpleJdbcCall jdbcCall = new SimpleJdbcCall(dataSource)
-                .withCatalogName("PKGFISIGAPPTRASPASO")
-                .withProcedureName("pro_aprobar_rechazar");
+        /**
+         * Invoca PKG_FI_MOVITRAS.pro_registrar_firma, que guarda la firma en MOTRFIFU
+         * o MOTRFIDE segun el tipo, sella la fecha de aceptacion correspondiente
+         * (MOTRFAFU / MOTRFADE) y mueve el estado a 'af' o 'ad'.
+         *
+         * El procedimiento valida el estado del tramite y el orden de las firmas (el
+         * destino no puede firmar antes que la fuente); Java valida el contenido de
+         * la imagen.
+         *
+         * @param tipoFirma {@link #FIRMA_FUENTE} o {@link #FIRMA_DESTINO}
+         * @param firma     bytes de la imagen, ya validada y decodificada por
+         *                  {@link com.finte.sigapp.utils.FirmaUtil}. El parametro del
+         *                  paquete es BLOB, y ProcedureExecutor enlaza el byte[] como
+         *                  java.sql.Blob para que no aplique el tope de 32 KB del RAW.
+         */
+        public void registrarFirma(Long   idTramite,
+                                   String tipoFirma,
+                                   byte[] firma,
+                                   String usuario) {
 
-        MapSqlParameterSource inParams = new MapSqlParameterSource()
-                .addValue("p_id_tramite",idTramite)
-                .addValue("p_estado",estado)
-                .addValue("p_observacion",observacion)
-                .addValue("p_usuario_actualiza",usuarioActualiza);
-        jdbcCall.execute(inParams);
-    }
+                log.info("Registrando firma {} del traspaso {} ({} bytes)",
+                          tipoFirma, idTramite, firma == null ? 0 : firma.length);
+
+                List<ProcedureParam> params = List.of(new ProcedureParam(PARAM_ID_TRAMITE, ParameterMode.IN, Long.class, idTramite),
+                                                      new ProcedureParam("p_tipo_firma", ParameterMode.IN, String.class, tipoFirma),
+                                                      new ProcedureParam("p_firma", ParameterMode.IN, byte[].class, firma),
+                                                      new ProcedureParam("p_usuario", ParameterMode.IN, String.class, usuario));
+
+                procedureExecutor.ejecutarProcedimiento(PAQUETE + ".pro_registrar_firma", params);
+        }
+
+        /**
+         * Invoca PKG_FI_MOVITRAS.pro_recibir, que sella MOTRFERE y deja el traspaso
+         * en estado 're'. Exige que ambas partes hayan firmado.
+         */
+        public void recibir(Long idTramite, String usuario) {
+
+                log.info("Registrando recepcion del traspaso {}", idTramite);
+
+                List<ProcedureParam> params = List.of(new ProcedureParam(PARAM_ID_TRAMITE, ParameterMode.IN, Long.class, idTramite),
+                                                      new ProcedureParam("p_usuario", ParameterMode.IN, String.class, usuario));
+
+                procedureExecutor.ejecutarProcedimiento(PAQUETE + ".pro_recibir", params);
+        }
+
+        /**
+         * El driver puede devolver el OUT numerico como BigDecimal, Long o Integer
+         * segun el tipo declarado en el procedimiento.
+         */
+        private BigDecimal aBigDecimal(Object valor) {
+                if (valor == null) {
+                        return null;
+                }
+                if (valor instanceof BigDecimal decimal) {
+                        return decimal;
+                }
+                return BigDecimal.valueOf(((Number) valor).longValue());
+        }
 }

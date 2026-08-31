@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.hibernate.Session;
 import org.springframework.stereotype.Component;
 
+import java.sql.Blob;
 import java.sql.CallableStatement;
 import java.sql.Types;
 import java.util.HashMap;
@@ -237,9 +238,32 @@ public class ProcedureExecutor {
 
     private void configurarParametros(StoredProcedureQuery query, List<ProcedureParam> params) {
         for (ProcedureParam param : params) {
+
+            // Un LOB binario no se puede enlazar como byte[]: Hibernate lo registra como
+            // VARBINARY y el driver lo manda como RAW, que en PL/SQL topa en 32 KB
+            // (ORA-01460). Envolviendolo en un java.sql.Blob el bind pasa a ser setBlob
+            // y el tamano deja de importar. Los llamadores siguen pasando byte[].
+            if (byte[].class.equals(param.getJavaType())) {
+                query.registerStoredProcedureParameter(param.getName(), Blob.class, param.getMode());
+                query.setParameter(param.getName(), crearBlob((byte[]) param.getValue()));
+                continue;
+            }
+
             query.registerStoredProcedureParameter(param.getName(), param.getJavaType(), param.getMode());
             query.setParameter(param.getName(), param.getValue());
         }
+    }
+
+    /**
+     * Crea un BLOB temporal sobre la sesion Hibernate activa. Requiere que haya
+     * transaccion abierta, que es la condicion normal de un @Transactional en el
+     * service.
+     */
+    private Blob crearBlob(byte[] contenido) {
+        if (contenido == null) {
+            return null;
+        }
+        return em.unwrap(Session.class).getLobHelper().createBlob(contenido);
     }
 
     private int getSqlType(Class<?> javaType) {
@@ -255,6 +279,8 @@ public class ProcedureExecutor {
             return Types.DATE;
         if (javaType == java.math.BigDecimal.class)
             return Types.NUMERIC;
+        if (javaType == byte[].class)
+            return Types.BLOB;
         return Types.VARCHAR;
     }
 }

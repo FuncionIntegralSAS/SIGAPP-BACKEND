@@ -12,6 +12,10 @@ public class TransferProcessRequest {
     @Pattern(regexp = "^(ap|na)$", message = "El estado solo puede ser 'ap' (aprobado) o 'na' (rechazado)")
     private String estado;
 
-    @Size(max = 4000, message = "La observación no puede exceder los 4000 caracteres")
-    private String observacion; // Opcional
+    /**
+     * Obligatoria al rechazar (se valida en el service). Al aprobar es opcional.
+     * El limite acompana a MOTRMORE / MOTROBSE, ambas VARCHAR2(500).
+     */
+    @Size(max = 500, message = "La observación no puede exceder los 500 caracteres")
+    private String observacion;
 }

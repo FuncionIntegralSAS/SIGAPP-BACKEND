@@ -36,11 +36,26 @@ public class SecurityConfig {
             "/v3/api-docs.yaml",
             "/api/v1/auth/**",
             "/api/v1/health/**",
+
             // Probes de Kubernetes: el kubelet no envia token JWT. Sin estas rutas
             // abiertas las probes reciben 401 y el pod nunca llega a Ready.
             "/actuator/health",
             "/actuator/health/liveness",
             "/actuator/health/readiness"
+    };
+
+    /**
+     * Rutas reservadas al login administrativo. hasRole("ADMIN") compara contra la
+     * autoridad ROLE_ADMIN, que JwtAuthenticationFilter construye a partir del
+     * claim "rol" del token.
+     */
+    private static final String ROL_ADMIN = "ADMIN";
+
+    private static final String[] ADMIN_ENDPOINTS = {
+            // Se declaran las dos formas: la raiz sin barra final (POST y GET de la
+            // bandeja) y el resto del arbol.
+            "/api/v1/traspasos",
+            "/api/v1/traspasos/**"
     };
 
     @Bean
@@ -55,6 +70,11 @@ public class SecurityConfig {
             http.authorizeHttpRequests(auth -> auth
                     .requestMatchers(PUBLIC_ENDPOINTS)
                     .permitAll()
+                    // Traspasos es modulo administrativo: solo acepta el token de
+                    // /api/v1/auth/login, que lleva el claim rol=ADMIN. El token de
+                    // /api/v1/auth/login/contador lleva rol=CONTADOR y aqui recibe 403.
+                    .requestMatchers(ADMIN_ENDPOINTS)
+                    .hasRole(ROL_ADMIN)
                     .anyRequest().authenticated());
             // Sin entry point propio Spring devuelve 403 vacio para todo rechazo.
             http.exceptionHandling(ex -> ex.authenticationEntryPoint(jwtEntryPoint));

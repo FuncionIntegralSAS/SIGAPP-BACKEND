@@ -7,14 +7,14 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * Fila de la bandeja de traspasos.
+ * Detalle de un traspaso, incluidas las firmas en base64.
  *
- * No incluye las firmas: son CLOB y solo se entregan en el detalle
- * ({@link TransferDetailResponse}).
+ * Se separa de {@link TransferResponse} para que la bandeja no arrastre los dos
+ * CLOB de firma en cada fila.
  */
 @Data
 @Builder
-public class TransferResponse {
+public class TransferDetailResponse {
 
     private Long id;
     private String estado;
@@ -26,12 +26,9 @@ public class TransferResponse {
 
     private String elemento;
     private String placaElemento;
-    private String nombreElemento;
 
     private String personaFuente;
     private String personaDestino;
-    private String bodegaFuente;
-    private String bodegaDestino;
 
     private String observacion;
     private String motivoRechazo;
@@ -43,4 +40,8 @@ public class TransferResponse {
     private LocalDateTime fechaAceptacionFuente;
     private LocalDateTime fechaAceptacionDestino;
     private LocalDateTime fechaRecibe;
+
+    /** Imagen PNG en base64. Null mientras la parte no haya firmado. */
+    private String firmaFuente;
+    private String firmaDestino;
 }

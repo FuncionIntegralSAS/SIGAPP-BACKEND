@@ -18,28 +18,30 @@ public interface RoleformRepository extends JpaRepository<RoleformEntity, Rolefo
    * y los heredados de los roles a los que pertenece.
    */
   @Query(value = """
-      SELECT RF.ROFOROLE,
-             RF.ROFOFORM,
-             RF.ROFOTIRO,
-             RF.ROFOTIFO,
-             RF.ROFOPROD
-        FROM FPL_ROLEFORM RF
-       WHERE RF.ROFOPROD = 'SIGAP'
-         AND RF.ROFOTIRO IN ('U')
-         AND RF.ROFOTIFO = 'F'
-         AND UPPER(TRIM(RF.ROFOROLE)) = UPPER(TRIM(:usuario))
-      UNION ALL
-      SELECT FO.ROFOROLE,
-             RF.ROFOFORM,
-             FO.ROFOTIRO,
-             FO.ROFOTIFO,
-             FO.ROFOPROD
-        FROM FPL_ROLEFORM RF
-        JOIN FPL_ROLEFORM FO ON (RF.ROFOPROD = FO.ROFOPROD AND RF.ROFOROLE = FO.ROFOFORM)
-       WHERE RF.ROFOPROD = 'SIGAP'
-         AND RF.ROFOTIRO != ('U')
-         AND RF.ROFOTIFO = 'F'
-         AND UPPER(TRIM(FO.ROFOROLE)) = UPPER(TRIM(:usuario))
-      """, nativeQuery = true)
+          select rf.roforole,
+          rf.rofoform,
+          rf.rofotiro,
+          rf.rofotifo,
+          rf.rofoprod
+      from fpl_roleform rf
+      where 1=1
+      and rf.rofotiro in ( 'U' )
+      and rf.rofotifo = 'F'
+      and upper(trim(rf.roforole)) = upper(trim(:usuario))
+      union all
+      select fo.roforole,
+          rf.rofoform,
+          fo.rofotiro,
+          fo.rofotifo,
+          fo.rofoprod
+      from fpl_roleform rf
+      join fpl_roleform fo
+      on ( rf.rofoprod = fo.rofoprod
+      and rf.roforole = fo.rofoform )
+      where 1=1
+      and rf.rofotiro != ( 'U' )
+      and rf.rofotifo = 'F'
+      and upper(trim(fo.roforole)) = upper(trim(:usuario))
+            """, nativeQuery = true)
   List<RoleformEntity> findPermisosByUsuario(@Param("usuario") String usuario);
 }
