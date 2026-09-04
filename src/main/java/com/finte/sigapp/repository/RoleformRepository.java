@@ -24,8 +24,7 @@ public interface RoleformRepository extends JpaRepository<RoleformEntity, Rolefo
              RF.ROFOTIFO,
              RF.ROFOPROD
         FROM FPL_ROLEFORM RF
-       WHERE RF.ROFOPROD = 'SIGAP'
-         AND RF.ROFOTIRO IN ('U')
+       WHERE  RF.ROFOTIRO IN ('U')
          AND RF.ROFOTIFO = 'F'
          AND UPPER(TRIM(RF.ROFOROLE)) = UPPER(TRIM(:usuario))
       UNION ALL
@@ -36,8 +35,7 @@ public interface RoleformRepository extends JpaRepository<RoleformEntity, Rolefo
              FO.ROFOPROD
         FROM FPL_ROLEFORM RF
         JOIN FPL_ROLEFORM FO ON (RF.ROFOPROD = FO.ROFOPROD AND RF.ROFOROLE = FO.ROFOFORM)
-       WHERE RF.ROFOPROD = 'SIGAP'
-         AND RF.ROFOTIRO != ('U')
+       WHERE RF.ROFOTIRO != ('U')
          AND RF.ROFOTIFO = 'F'
          AND UPPER(TRIM(FO.ROFOROLE)) = UPPER(TRIM(:usuario))
       """, nativeQuery = true)
