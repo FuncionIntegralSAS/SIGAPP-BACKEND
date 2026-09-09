@@ -291,6 +291,45 @@ create or replace package body pkg_fi_movitras is
 
 
    -----------------------------------------------------------------------------
+   -- pro_valida_activo_libre
+   --
+   -- Un activo no puede estar en dos traspasos abiertos a la vez.
+   --
+   -- FI_MOVITRAS_UK_LINE solo impide repetirlo DENTRO del mismo tramite; sin esta
+   -- comprobacion dos personas podrian crear traspasos del mismo elemento hacia
+   -- destinos distintos y los dos llegarian a aprobarse.
+   --
+   -- Cierran el activo los estados finales: 'na' rechazado y 're' recibido. Un
+   -- tramite en 'pe' o en 'ap' lo mantiene comprometido.
+   --
+   -- El indice unico parcial FI_MOVITRAS_UK_ABIERTO garantiza lo mismo a nivel de
+   -- tabla. Esta validacion existe para dar un mensaje que diga en que traspaso
+   -- esta el elemento, en vez de un ORA-00001.
+   -----------------------------------------------------------------------------
+   procedure pro_valida_activo_libre ( p_motrarti in fi_movitras.motrarti%type,
+                                       p_motrplac in fi_movitras.motrplac%type )
+   is
+      in_tramite fi_movitras.motrnutr%type;
+      sb_estado  fi_movitras.motresta%type;
+   begin
+      select min(motrnutr) keep (dense_rank first order by motrnutr),
+             min(motresta) keep (dense_rank first order by motrnutr)
+        into in_tramite, sb_estado
+        from fi_movitras
+       where motrarti = p_motrarti
+         and motrplac = nvl(p_motrplac,c_placavacia)
+         and motresta in ( c_pendiente, c_aprobado );
+
+      if ( in_tramite is not null ) then
+         pro_error('El elemento ['|| p_motrarti|| '] con placa ['|| p_motrplac
+                   || '] ya esta en el traspaso ['|| in_tramite || '], que sigue abierto en estado ['
+                   || sb_estado || ']');
+         raise pkgerror.generic;
+      end if;
+   end pro_valida_activo_libre;
+
+
+   -----------------------------------------------------------------------------
    -- pro_valida_activo_tramite
    --
    -- Comprueba que un activo pueda entrar en un tramite que ya tiene lineas.
@@ -469,6 +508,8 @@ create or replace package body pkg_fi_movitras is
       pro_valida_persona(p_motrpede,'destino');
       --valido que exista el activo en ACTIFIJO y tomo su identificador interno
       sb_acfiidin := fun_acfiidin(p_motrarti,p_motrplac);
+      --y que no venga arrastrado de otro traspaso todavia abierto
+      pro_valida_activo_libre(p_motrarti,p_motrplac);
 
       -- El centro de informacion no es parametro: sale del propio activo. Cada
       -- elemento pertenece al suyo, una clave global mandaria todos los
@@ -617,7 +658,12 @@ create or replace package body pkg_fi_movitras is
       -- de centro de informacion y tercero.
       pkgtbactifijo.prosel(fun_acfiidin(p_motrarti,p_motrplac),null,rg_actifijo);
 
+      -- El repetido dentro de ESTE tramite se comprueba primero: si no, el
+      -- validador de traspasos abiertos lo encontraria aqui mismo y diria "ya
+      -- esta en el traspaso N" apuntando al propio tramite, que confunde.
       pro_valida_activo_tramite(p_motrnutr,p_motrarti,p_motrplac,rg_actifijo);
+
+      pro_valida_activo_libre(p_motrarti,p_motrplac);
 
       pro_insertar_linea(rg_cabecera,p_motrarti,p_motrplac,p_usuario);
 

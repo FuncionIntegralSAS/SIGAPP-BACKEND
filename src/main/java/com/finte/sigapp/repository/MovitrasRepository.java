@@ -4,6 +4,7 @@ import com.finte.sigapp.entity.MovitrasEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -24,4 +25,17 @@ public interface MovitrasRepository extends JpaRepository<MovitrasEntity, Long> 
      * pueden tomar de cualquiera de las filas: son identicos en todas.
      */
     List<MovitrasEntity> findByMotrnutrOrderByMotridmt(Long motrnutr);
+
+    /**
+     * Lineas abiertas que usan alguno de estos articulos.
+     *
+     * Sirve para avisar antes de crear que un elemento ya esta comprometido. Se
+     * filtra solo por el codigo de articulo y el par exacto con la placa se cruza
+     * en el service: un mismo articulo puede tener varias placas y son elementos
+     * distintos.
+     *
+     * @param estados los que dejan el traspaso abierto: 'pe' y 'ap'
+     */
+    List<MovitrasEntity> findByMotrestaInAndMotrartiIn(Collection<String> estados,
+                                                       Collection<String> articulos);
 }

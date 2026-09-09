@@ -184,6 +184,37 @@ elementos físicos diferentes. Por eso `MOTRPLAC` es `NOT NULL` con `'.'` para l
 que no tienen placa, igual que `ACTIFIJO` — un `NULL` no deduplica en un índice
 único.
 
+### Un activo, un traspaso abierto
+
+`FI_MOVITRAS_UK_LINE` solo impide repetir un elemento **dentro** del mismo
+trámite. Para que no aparezca en dos traspasos abiertos a la vez hay un índice
+único **parcial**:
+
+```sql
+CREATE UNIQUE INDEX FI_MOVITRAS_UK_ABIERTO ON FI_MOVITRAS (
+    CASE WHEN MOTRESTA IN ('pe','ap') THEN MOTRARTI END,
+    CASE WHEN MOTRESTA IN ('pe','ap') THEN MOTRPLAC END);
+```
+
+Las dos expresiones dan `NULL` cuando el trámite está cerrado (`na` o `re`), y
+Oracle **no indexa las entradas con todas las columnas nulas**: los cerrados no
+ocupan el índice y liberan el activo. Entre los abiertos, el par
+(artículo, placa) es único.
+
+`pro_valida_activo_libre` comprueba lo mismo antes de insertar, para responder
+*"ya está en el traspaso N, que sigue abierto"* en vez de un `ORA-00001`. El
+índice es la red de seguridad ante dos sesiones creando a la vez, que es la única
+ventana que la validación en PL/SQL no puede cerrar.
+
+⚠️ Si al reejecutar `01` el índice falla con `ORA-01452`, hay datos que ya violan
+la regla. Localizarlos con:
+
+```sql
+SELECT motrarti, motrplac, COUNT(DISTINCT motrnutr)
+  FROM fi_movitras WHERE motresta IN ('pe','ap')
+ GROUP BY motrarti, motrplac HAVING COUNT(DISTINCT motrnutr) > 1;
+```
+
 ⚠️ **De `MOTRDREM` a `MOTRFERE` el contenido se repite en las N líneas.** Es el
 costo del modelo, y solo se mantiene coherente si **todo `UPDATE` filtra por
 `MOTRNUTR`** y nunca por `MOTRIDMT`. El paquete lo respeta; cualquier DML manual

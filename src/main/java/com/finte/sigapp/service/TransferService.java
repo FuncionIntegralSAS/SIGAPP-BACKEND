@@ -46,5 +46,19 @@ public interface TransferService {
      */
     byte[] obtenerFirma(Long numeroTramite, String tipoFirma);
 
+    /**
+     * Activos de los que responde una persona, para el selector de articulos al
+     * crear un traspaso. Marca los que ya estan en un traspaso sin cerrar.
+     *
+     * @param empresa opcional, filtra por la empresa de la bodega del activo
+     */
+    ObjectListResponse listarActivosDePersona(String persona, String empresa);
+
+    /**
+     * Personas asociadas a una bodega, para elegir fuente o destino. El vinculo
+     * es la division: es el camino inverso de fun_bodega_persona del paquete.
+     */
+    ObjectListResponse listarPersonasDeBodega(String bodega, String empresa);
+
     ObjectResponse recibir(Long numeroTramite, String bearerToken);
 }

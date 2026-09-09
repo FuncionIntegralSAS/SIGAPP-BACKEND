@@ -6,17 +6,23 @@ import com.finte.sigapp.dto.request.TransferRequest;
 import com.finte.sigapp.dto.request.TransferSignRequest;
 import com.finte.sigapp.dto.response.ObjectListResponse;
 import com.finte.sigapp.dto.response.ObjectResponse;
+import com.finte.sigapp.dto.response.TransferAssetResponse;
 import com.finte.sigapp.dto.response.TransferCreatedResponse;
 import com.finte.sigapp.dto.response.TransferDetailResponse;
 import com.finte.sigapp.dto.response.TransferItemResponse;
+import com.finte.sigapp.dto.response.TransferPersonResponse;
 import com.finte.sigapp.dto.response.TransferResponse;
 import com.finte.sigapp.dto.response.TransferSignatureResponse;
 import com.finte.sigapp.entity.MotrfirmEntity;
 import com.finte.sigapp.entity.MovitrasEntity;
 import com.finte.sigapp.exception.BussinessException;
+import com.finte.sigapp.model.ActivoPersonaModel;
 import com.finte.sigapp.model.MovitrasTraspasoModel;
+import com.finte.sigapp.model.PersonalModel;
+import com.finte.sigapp.repository.ActivoPersonaRepository;
 import com.finte.sigapp.repository.MotrfirmRepository;
 import com.finte.sigapp.repository.MovitrasRepository;
+import com.finte.sigapp.repository.PersonalRepository;
 import com.finte.sigapp.repository.TransferJpaRepository;
 import com.finte.sigapp.repository.TransferRepository;
 import com.finte.sigapp.security.JwtTokenProvider;
@@ -69,6 +75,12 @@ class TransferServiceImplTest {
     private MotrfirmRepository motrfirmRepository;
 
     @Mock
+    private ActivoPersonaRepository activoPersonaRepository;
+
+    @Mock
+    private PersonalRepository personalRepository;
+
+    @Mock
     private JwtTokenProvider tokenProvider;
 
     private TransferServiceImpl service;
@@ -84,6 +96,8 @@ class TransferServiceImplTest {
                 transferJpaRepository,
                 movitrasRepository,
                 motrfirmRepository,
+                activoPersonaRepository,
+                personalRepository,
                 tokenProvider,
                 new FirmaUtil(MAX_BYTES_FIRMA),
                 MAX_ARTICULOS);
@@ -126,6 +140,23 @@ class TransferServiceImplTest {
     private void stubCreacionOk() {
         when(repository.crearSolicitud(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(creado());
+        stubSinComprometidos();
+    }
+
+    /** Ningun articulo de la solicitud esta en un traspaso abierto. */
+    private void stubSinComprometidos() {
+        when(movitrasRepository.findByMotrestaInAndMotrartiIn(anyCollection(), anyCollection()))
+                .thenReturn(List.of());
+    }
+
+    /** Linea de un traspaso abierto que ya usa ese elemento. */
+    private MovitrasEntity lineaAbierta(Long tramite, String articulo, String placa) {
+        MovitrasEntity e = new MovitrasEntity();
+        e.setMotrnutr(tramite);
+        e.setMotrarti(articulo);
+        e.setMotrplac(placa);
+        e.setMotresta("pe");
+        return e;
     }
 
     // ------------------------------------------------------------------ crear
@@ -216,6 +247,66 @@ class TransferServiceImplTest {
     }
 
     @Test
+    @DisplayName("crearSolicitud rechaza los articulos que ya estan en un traspaso abierto")
+    void crearSolicitud_RechazaArticuloComprometido() {
+        stubUsuarioDelToken();
+
+        when(movitrasRepository.findByMotrestaInAndMotrartiIn(anyCollection(), anyCollection()))
+                .thenReturn(List.of(lineaAbierta(7L, "ART-0034", "PL-802")));
+
+        TransferRequest req = requestValido(
+                articulo("ART-0012", "PL-771"),
+                articulo("ART-0034", "PL-802"));
+
+        ObjectResponse res = service.crearSolicitud(req, BEARER);
+
+        assertEquals(CODE_ERROR, res.getCode());
+        assertTrue(res.getMsg().contains("ART-0034"), "El mensaje nombra el articulo");
+        assertTrue(res.getMsg().contains("7"), "y el traspaso que lo tiene");
+        // Nada se crea: ni documento ni lineas.
+        verify(repository, never()).crearSolicitud(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(repository, never()).agregarArticulo(anyLong(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("crearSolicitud lista TODOS los comprometidos en un solo mensaje")
+    void crearSolicitud_ListaTodosLosComprometidos() {
+        stubUsuarioDelToken();
+
+        when(movitrasRepository.findByMotrestaInAndMotrartiIn(anyCollection(), anyCollection()))
+                .thenReturn(List.of(lineaAbierta(7L, "ART-0034", "PL-802"),
+                                    lineaAbierta(9L, "ART-0090", ".")));
+
+        TransferRequest req = requestValido(
+                articulo("ART-0012", "PL-771"),
+                articulo("ART-0034", "PL-802"),
+                articulo("ART-0090", null));
+
+        ObjectResponse res = service.crearSolicitud(req, BEARER);
+
+        assertEquals(CODE_ERROR, res.getCode());
+        // El paquete cortaria en el primero; aqui salen los dos de una vez.
+        assertTrue(res.getMsg().contains("ART-0034"));
+        assertTrue(res.getMsg().contains("ART-0090"));
+        assertFalse(res.getMsg().contains("ART-0012"), "El que esta libre no se menciona");
+    }
+
+    @Test
+    @DisplayName("crearSolicitud no bloquea el mismo articulo con otra placa")
+    void crearSolicitud_OtraPlacaEsOtroElemento() {
+        stubUsuarioDelToken();
+        stubCreacionOk();
+
+        // El traspaso 7 tiene ART-0034 con la placa 802; se pide la 803.
+        when(movitrasRepository.findByMotrestaInAndMotrartiIn(anyCollection(), anyCollection()))
+                .thenReturn(List.of(lineaAbierta(7L, "ART-0034", "PL-802")));
+
+        ObjectResponse res = service.crearSolicitud(requestValido(articulo("ART-0034", "PL-803")), BEARER);
+
+        assertEquals(CODE_OK, res.getCode());
+    }
+
+    @Test
     @DisplayName("crearSolicitud rechaza que fuente y destino sean la misma persona")
     void crearSolicitud_RechazaFuenteIgualDestino() {
         stubUsuarioDelToken();
@@ -235,6 +326,7 @@ class TransferServiceImplTest {
     void crearSolicitud_DevuelveErrorSiNoRetornaNumero() {
         stubUsuarioDelToken();
 
+        stubSinComprometidos();
         when(repository.crearSolicitud(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(null);
 
@@ -512,5 +604,74 @@ class TransferServiceImplTest {
 
         assertEquals(CODE_OK, res.getCode());
         verify(repository, times(1)).recibir(TRAMITE, USUARIO);
+    }
+
+    // ------------------------------------------------- apoyo al formulario
+
+    private ActivoPersonaModel activo(String articulo, String placa, String cein, Integer enTramite) {
+        ActivoPersonaModel m = new ActivoPersonaModel();
+        m.setAcfiarti(articulo);
+        m.setAcfiplac(placa);
+        m.setAcfiobse("Portatil Dell");
+        m.setAcficein(cein);
+        m.setAcfiterc("TER_01");
+        m.setEnTramite(enTramite);
+        return m;
+    }
+
+    @Test
+    @DisplayName("listarActivosDePersona marca los que ya estan en un traspaso abierto")
+    void listarActivosDePersona_MarcaLosComprometidos() {
+        when(activoPersonaRepository.buscarPorResponsable("PER_FUENTE", "001"))
+                .thenReturn(List.of(activo("ART-0012", "PL-771", "CEIN_A", 0),
+                                    activo("ART-0034", "PL-802", "CEIN_A", 1)));
+
+        ObjectListResponse res = service.listarActivosDePersona("PER_FUENTE", "001");
+
+        assertEquals(CODE_OK, res.getCode());
+        assertEquals(2, res.getList().size());
+
+        TransferAssetResponse libre = (TransferAssetResponse) res.getList().get(0);
+        assertEquals("ART-0012", libre.getArticulo());
+        assertEquals("PL-771", libre.getPlaca());
+        // Centro de informacion y tercero viajan para que el front no deje mezclar.
+        assertEquals("CEIN_A", libre.getCentroInformacion());
+        assertEquals("TER_01", libre.getTercero());
+        assertFalse(libre.isEnTramite());
+
+        // No se excluye: se marca, para que el usuario sepa por que no puede usarlo.
+        assertTrue(((TransferAssetResponse) res.getList().get(1)).isEnTramite());
+    }
+
+    @Test
+    @DisplayName("listarActivosDePersona trata un ENTRAMITE nulo como no comprometido")
+    void listarActivosDePersona_ToleraEnTramiteNulo() {
+        when(activoPersonaRepository.buscarPorResponsable("PER_FUENTE", null))
+                .thenReturn(List.of(activo("ART-0012", ".", "CEIN_A", null)));
+
+        ObjectListResponse res = service.listarActivosDePersona("PER_FUENTE", null);
+
+        assertFalse(((TransferAssetResponse) res.getList().get(0)).isEnTramite());
+    }
+
+    @Test
+    @DisplayName("listarPersonasDeBodega devuelve la cedula que se envia al crear")
+    void listarPersonasDeBodega_DevuelveLaCedula() {
+        PersonalModel persona = new PersonalModel();
+        persona.setPerscodi("16801364");
+        persona.setPersnomb("Ana");
+        persona.setPersapel("Gomez");
+
+        when(personalRepository.buscarPorBodega("BOD_01", "001")).thenReturn(List.of(persona));
+
+        ObjectListResponse res = service.listarPersonasDeBodega("BOD_01", "001");
+
+        assertEquals(CODE_OK, res.getCode());
+        assertEquals(1, res.getList().size());
+
+        TransferPersonResponse fila = (TransferPersonResponse) res.getList().get(0);
+        assertEquals("16801364", fila.getCedula());
+        assertEquals("Ana", fila.getNombre());
+        assertEquals("Gomez", fila.getApellido());
     }
 }
