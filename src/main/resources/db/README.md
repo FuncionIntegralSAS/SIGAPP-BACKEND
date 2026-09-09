@@ -13,39 +13,34 @@ Flyway ni Liquibase.
 
 | # | Archivo | Contenido |
 |---|---------|-----------|
-| 1 | `01_FI_MOVITRAS.sql` | Tabla `FI_MOVITRAS`, secuencia, índices y foráneas |
-| 2 | `02_PKG_FI_MOVITRAS.pks` | Especificación del paquete |
-| 3 | `03_PKG_FI_MOVITRAS.pkb` | Cuerpo del paquete |
-| 4 | `04_SINONIMOS.sql` | Permisos y sinónimos para `ARQGUIPNACUA` |
-| 5 | `05_PARAOPER.sql` | Parámetros de configuración en `PARAOPER` |
-| 6 | `06_MIGRA_FIRMAS_BLOB.sql` | **Solo ambientes existentes**: pasa las firmas de `CLOB` a `BLOB` |
+| 1 | `01_FI_MOVITRAS.sql` | Tabla `FI_MOVITRAS`, secuencias, índices y foráneas |
+| 2 | `02_FI_MOTRFIRM.sql` | Tabla `FI_MOTRFIRM` (firmas), índice y foránea |
+| 3 | `03_PKG_FI_MOVITRAS.pks` | Especificación del paquete |
+| 4 | `04_PKG_FI_MOVITRAS.pkb` | Cuerpo del paquete |
+| 5 | `05_SINONIMOS.sql` | Permisos y sinónimos para `ARQGUIPNACUA` |
+| 6 | `06_PARAOPER.sql` | Parámetros de configuración en `PARAOPER` |
 
-Del `01` al `04` son reejecutables: `01` envuelve cada objeto en un bloque PL/SQL
-que ignora los errores de "ya existe", el paquete usa `CREATE OR REPLACE`, y
-`GRANT` / `CREATE OR REPLACE SYNONYM` son idempotentes por naturaleza. El `05`
-**no**: son `INSERT`, se ejecuta una sola vez y después se corrige con `UPDATE`.
+Del `01` al `05` son reejecutables: `01` y `02` envuelven cada objeto en un
+bloque PL/SQL que ignora los errores de "ya existe", el paquete usa
+`CREATE OR REPLACE`, y `GRANT` / `CREATE OR REPLACE SYNONYM` son idempotentes por
+naturaleza. El `06` **no**: son `INSERT`, se ejecuta una sola vez y después se
+corrige con `UPDATE`.
 
-El `06` también es reejecutable, pero **no aplica a instalaciones nuevas**: solo
-hace algo si la tabla ya existe con las firmas en `CLOB`. Ver *Firmas* más abajo.
+⚠️ El `04` no compila si el `01` y el `02` no se aplicaron antes: el cuerpo del
+paquete referencia `FI_MOVITRAS.MOTRNUTR` y la tabla `FI_MOTRFIRM`. Y recordar el
+`/` final de los archivos de paquete — sin él *sqlplus* no ejecuta el
+`CREATE OR REPLACE` y no avisa de nada.
 
 ```bash
 sqlplus SRFPNACUA/clave@servicio @01_FI_MOVITRAS.sql
-sqlplus SRFPNACUA/clave@servicio @02_PKG_FI_MOVITRAS.pks
-sqlplus SRFPNACUA/clave@servicio @03_PKG_FI_MOVITRAS.pkb
-sqlplus SRFPNACUA/clave@servicio @04_SINONIMOS.sql
-sqlplus SRFPNACUA/clave@servicio @05_PARAOPER.sql
+sqlplus SRFPNACUA/clave@servicio @02_FI_MOTRFIRM.sql
+sqlplus SRFPNACUA/clave@servicio @03_PKG_FI_MOVITRAS.pks
+sqlplus SRFPNACUA/clave@servicio @04_PKG_FI_MOVITRAS.pkb
+sqlplus SRFPNACUA/clave@servicio @05_SINONIMOS.sql
+sqlplus SRFPNACUA/clave@servicio @06_PARAOPER.sql
 ```
 
-Y solo si la tabla ya existía con las firmas en `CLOB`, **antes** de recompilar el
-paquete:
-
-```bash
-sqlplus SRFPNACUA/clave@servicio @06_MIGRA_FIRMAS_BLOB.sql
-sqlplus SRFPNACUA/clave@servicio @02_PKG_FI_MOVITRAS.pks
-sqlplus SRFPNACUA/clave@servicio @03_PKG_FI_MOVITRAS.pkb
-```
-
-Antes de ejecutar el `05` hay que reemplazar los valores marcados con
+Antes de ejecutar el `06` hay que reemplazar los valores marcados con
 `>>> DEFINIR <<<` en el bloque `DEFINE` de la cabecera.
 
 ## Esquemas
@@ -57,16 +52,16 @@ calificar las tablas del ERP que usa el paquete (`REQUSUMI`, `ACTIFIJO`,
 `PARAOPER`, `TIMOOPER`, `TIPODOCU`). Compilarlo en otro esquema deja el cuerpo
 inválido con `PL/SQL: ORA-00942`.
 
-Antes de aplicar `02` y `03`, confirmar la conexión:
+Antes de aplicar `03` y `04`, confirmar la conexión:
 
 ```sql
 SELECT USER FROM DUAL;   -- debe devolver SRFPNACUA
 ```
 
-**`ARQGUIPNACUA`** alcanza los objetos por sinónimo privado (`04_SINONIMOS.sql`);
+**`ARQGUIPNACUA`** alcanza los objetos por sinónimo privado (`05_SINONIMOS.sql`);
 no tiene copia propia del paquete.
 
-`04_SINONIMOS.sql` trae dos rutas para crear el sinónimo; hay que ejecutar una
+`05_SINONIMOS.sql` trae dos rutas para crear el sinónimo; hay que ejecutar una
 sola:
 
 - **Ruta A** (activa por defecto): se corre como `SRFPNACUA` y crea el sinónimo
@@ -167,6 +162,45 @@ El tipo de documento así resuelto **debe tener numerador automático**.
 `TRGBINR_REQUSUMI` y se recupera con `RETURNING`. Si `num_automatico` devuelve
 falso, el `INSERT` falla por `NOT NULL`.
 
+## Un trámite, varios artículos
+
+`FI_MOVITRAS` guarda **una fila por artículo**. Lo que las agrupa es `MOTRNUTR`,
+el número de trámite, que sale de `FI_TRASPASO_SEQ` y es idéntico en todas las
+líneas del mismo traspaso:
+
+```
+REQUSUMI  1 ──── N  FI_MOVITRAS      una línea por activo
+MOTRNUTR  1 ──── 2  FI_MOTRFIRM      firma fuente y firma destino
+```
+
+`MOTRIDMT` sigue siendo la clave técnica de la fila, pero **no** es el
+identificador de negocio: el endpoint, las firmas y el paquete trabajan siempre
+con `MOTRNUTR`. Son dos secuencias distintas a propósito — reutilizar una sola
+dejaría los números de trámite salteados y dejarían de ser legibles.
+
+La unicidad de la línea es `(MOTRNUTR, MOTRARTI, MOTRPLAC)`, no solo el artículo:
+un mismo `ACFIARTI` puede aparecer varias veces con placas distintas, porque son
+elementos físicos diferentes. Por eso `MOTRPLAC` es `NOT NULL` con `'.'` para los
+que no tienen placa, igual que `ACTIFIJO` — un `NULL` no deduplica en un índice
+único.
+
+⚠️ **De `MOTRDREM` a `MOTRFERE` el contenido se repite en las N líneas.** Es el
+costo del modelo, y solo se mantiene coherente si **todo `UPDATE` filtra por
+`MOTRNUTR`** y nunca por `MOTRIDMT`. El paquete lo respeta; cualquier DML manual
+también debe hacerlo. Consulta de control para verificarlo:
+
+```sql
+SELECT motrnutr, COUNT(DISTINCT motresta)
+  FROM fi_movitras
+ GROUP BY motrnutr
+HAVING COUNT(DISTINCT motresta) > 1;   -- debe devolver cero filas
+```
+
+Y por la misma razón los procedimientos ya no pueden hacer
+`SELECT * INTO ... WHERE motridmt = :id FOR UPDATE`: filtrando por `MOTRNUTR` eso
+sería `TOO_MANY_ROWS`. Usan un cursor que bloquea las N líneas y lee de paso los
+datos comunes.
+
 ## Relación con el documento
 
 Todo traspaso cuelga de un `REQUSUMI`. La llave viaja en tres columnas que
@@ -179,18 +213,23 @@ siguen la convención del ERP (`DR` = Documento Requisición, igual que
 | `MOTRDRTD` | `RESUTIDO` | tipo de documento |
 | `MOTRDRND` | `RESUNUME` | número |
 
-## Movimiento de inventario al aprobar
+## Movimiento de inventario al recibir
 
-`pro_aprobar_rechazar` no se limita a cambiar estados. Cuando el trámite se
-**aprueba**, además genera el documento de inventario del ERP:
+**Regla de oro del módulo: el documento de inventario se genera al RECIBIR, nunca
+al aprobar.** Aprobar autoriza el trámite; recibir es lo que mueve el activo, y
+solo se puede recibir con las dos firmas registradas. Un traspaso aprobado que
+nadie llega a firmar no deja rastro en `DOCUINVE` ni en `MOVIINVE`.
+
+`pro_recibir` valida las firmas y genera el documento de inventario del ERP:
 
 | Tabla | Qué se inserta |
 |-------|----------------|
 | `DOCUINVE` | Cabecera, una fila. Se emite contra la división de la persona **destino** |
-| `MOVIINVE` | Detalle, una sola línea (`MOINSECU = 1`): un traspaso mueve un elemento |
+| `MOVIINVE` | Detalle, **una línea por artículo** del trámite, con `MOINSECU` de 1 a N |
 
-Cuando se **rechaza** no se inserta nada en ninguna de las dos: el `REQUSUMI` se
-anula con `ESTAANUL` y el trámite termina ahí.
+`pro_aprobar_rechazar` solo mueve estados: el del trámite en sus N líneas y el
+del documento `REQUSUMI`. Cuando se **rechaza**, el `REQUSUMI` se anula con
+`ESTAANUL` y el trámite termina ahí.
 
 Decisiones de mapeo que no son obvias leyendo el código:
 
@@ -209,6 +248,19 @@ Decisiones de mapeo que no son obvias leyendo el código:
   ```sql
   SELECT tidotido, COUNT(*) FROM TIPODOCU GROUP BY tidotido HAVING COUNT(*) > 1;
   ```
+- **Un solo documento por trámite**: `DOCUINVE` es una fila aunque el traspaso
+  mueva cuatro activos. Lo que se repite es `MOVIINVE`, recorriendo las líneas de
+  `FI_MOVITRAS` del mismo `MOTRNUTR`. `MOINSECU` dejó de ser la constante `1` y
+  pasó a ser el contador del bucle.
+- **Todo en la transacción de `pro_recibir`**: o queda el traspaso recibido con su
+  documento completo —las N líneas—, o no queda nada.
+- **Campos de cabecera que salían del activo**: `RESUCEIN` en la requisición y
+  `DOINTERC` en el documento de inventario se tomaban de `ACTIFIJO`. Con varios
+  artículos pueden no coincidir, así que el trámite **se rechaza** al crearlo
+  nombrando los artículos en conflicto, en vez de tomar el del primero y mandar el
+  documento a un centro equivocado sin que nadie se entere. Se valida al agregar
+  cada artículo, no al recibir, para que el error salga cuando aún se puede
+  corregir.
 - **Numeración**: la entrega el numerador del tipo de documento
   (`Pkgtbtidoemnu.ProSel` + `pkgDocu_General.funProxi_Nume`). Aquí **no** hay
   trigger que numere, a diferencia de `REQUSUMI`.
@@ -228,9 +280,35 @@ el trámite en `pe` y bajo el `FOR UPDATE` de la fila, así que una segunda
 aprobación se corta antes por estado. Todo va en la transacción del llamador: o
 queda el trámite aprobado **con** su documento, o no queda nada.
 
-## Firmas: `BLOB`, no base64 en `CLOB`
+## Firmas: tabla propia y `BLOB`
 
-`MOTRFIFU` y `MOTRFIDE` guardan los **bytes** de la imagen, no su base64:
+Las firmas no viven en `FI_MOVITRAS` sino en `FI_MOTRFIRM`, **dos filas por
+trámite** creadas vacías al abrirlo:
+
+| `MOFIPOSI` | Quién |
+|---|---|
+| `1` | la persona que **entrega** (fuente) |
+| `2` | la persona que **recibe** (destino) |
+
+Antes la firma se guardaba en la fila del traspaso. Con varios artículos por
+trámite eso significaba repetir la misma imagen en cada línea; separarla la deja
+una sola vez.
+
+**No hay orden entre las dos.** Cualquiera puede firmar primero. Por eso el
+avance de firma no se refleja en `MOTRESTA` —que se queda en `ap` mientras se
+firma— sino en `MOFIFEFI`: nulo es "aún no firmó". Son dos booleanos
+independientes y una sola columna de estado no puede representarlos, que es la
+razón por la que `af` y `ad` desaparecieron del `CHECK`. `pro_recibir` exige las
+dos posiciones firmadas.
+
+**No hay llave foránea hacia el trámite.** `MOFINUTR` apunta a
+`FI_MOVITRAS.MOTRNUTR`, que se repite en las N líneas, y Oracle exige `PRIMARY
+KEY` o `UNIQUE` en la columna referenciada (`ORA-02270`). La integridad la
+sostiene el paquete, que valida la existencia del trámite antes de escribir. Lo
+que sí queda declarado es la PK `(MOFINUTR, MOFIPOSI)`, que impide dos firmas
+para la misma posición.
+
+`MOFIFIPE` es `BLOB` con los **bytes** de la imagen, no su base64:
 
 - Ocupa ~33 % menos que el texto base64.
 - Desde SQL Developer / Toad la firma se abre con *View as image*, que es lo que
@@ -247,42 +325,20 @@ antes de llamar a `pro_registrar_firma`, y lo vuelve a codificar en el detalle.
 `pro_registrar_firma` solo verifica que la firma no llegue vacía
 (`dbms_lob.getlength`); el formato lo valida Java, que es donde vive la regla.
 
-### Migrar un ambiente que ya tenía las columnas en `CLOB`
-
-Oracle no deja convertir el tipo en sitio: `ALTER TABLE ... MODIFY (MOTRFIFU BLOB)`
-responde `ORA-22858`. Y `DBMS_LOB.CONVERTTOBLOB` tampoco sirve, porque copia los
-bytes del **texto** base64 en vez de decodificarlo. `06_MIGRA_FIRMAS_BLOB.sql` hace
-el rodeo completo:
-
-| Paso | Qué hace |
-|------|----------|
-| 0 | Copia el base64 a `FI_MOVITRAS_FIBAK`, solo si hay firmas guardadas |
-| 1 | Agrega `MOTRFIF2` / `MOTRFID2` (`BLOB`) |
-| 2 | Recorre las filas decodificando el base64 con `UTL_ENCODE.BASE64_DECODE`, en trozos múltiplo de 4 |
-| 3 | Verifica que ninguna firma se haya quedado sin convertir |
-| 4 | Suelta las columnas viejas y renombra las nuevas |
-
-Los pasos 3 y 4 van en el mismo bloque: si alguna firma no se pudo decodificar, el
-script corta con la lista de `MOTRIDMT` y **no** suelta nada.
-
-El paso 2 limpia lo que el backend antiguo guardaba sin normalizar: prefijo
-`data:image/...;base64,` y saltos de línea del base64 MIME.
-
-Después de validar el resultado, `DROP TABLE FI_MOVITRAS_FIBAK PURGE;`.
-
-⚠️ **Orden**: el `06` va antes que el `02` y el `03`. El cuerpo actual del paquete
-asigna un `CLOB` a `MOTRFIFU`; recompilarlo con `p_firma IN BLOB` contra la tabla
-sin migrar lo deja inválido. El `DROP COLUMN` del paso 4 invalida el paquete de
-todos modos (usa `%ROWTYPE`), y por eso se recompila justo después.
-
 ## Pendiente
 
 - La foránea de `FI_MOVITRAS` hacia `ACTIFIJO (ACFIARTI, ACFIPLAC)` queda
   comentada en `01_FI_MOVITRAS.sql`: exige una constraint `UNIQUE` sobre ese par
   que no está confirmada.
+- `FI_MOTRFIRM` no puede llevar foránea hacia el trámite, por lo explicado en
+  *Firmas*. Si alguna vez `MOTRNUTR` pasara a vivir en una tabla donde sea único,
+  esa foránea se podría declarar.
+- **Tope de artículos por trámite**: pendiente de fijar. Cada artículo es una
+  línea de `MOVIINVE` dentro de la misma transacción de aprobación.
 - `pro_recibir` deja marcado el punto donde va el **cambio de responsable en
-  `ACTIFIJO`** (`ACFIPERS` / `ACFIBODE`). El movimiento de inventario ya no está
-  pendiente: se genera al aprobar, según la sección anterior.
-- `04_SINONIMOS.sql` no cambió: solo cubre los objetos propios del módulo
-  (`FI_MOVITRAS`, su secuencia y el paquete). Las tablas y paquetes nuevos del
+  `ACTIFIJO`** (`ACFIPERS` / `ACFIBODE`), justo después de generar el movimiento
+  de inventario. Con varios artículos por trámite ese enganche deja de ser una
+  línea y pasa a ser un bucle sobre las líneas del `MOTRNUTR`.
+- `05_SINONIMOS.sql` cubre los cinco objetos propios del módulo: las dos tablas,
+  las dos secuencias y el paquete. Las tablas y paquetes nuevos del
   ERP los resuelve `SRFPNACUA` directamente, que es donde compila el paquete.

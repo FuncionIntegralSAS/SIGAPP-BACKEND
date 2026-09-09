@@ -28,7 +28,7 @@ public class EmailServiceImpl implements EmailService {
             return;
         }
 
-        usuarios.forEach(this::procesarEnvio);
+        usuarios.stream().forEach(this::procesarEnvio);
     }
 
     private void procesarEnvio(FicofiuscoEntity usuario) {

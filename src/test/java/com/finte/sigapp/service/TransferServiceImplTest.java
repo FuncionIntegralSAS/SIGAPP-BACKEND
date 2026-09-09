@@ -1,5 +1,6 @@
 package com.finte.sigapp.service;
 
+import com.finte.sigapp.dto.request.TransferItemRequest;
 import com.finte.sigapp.dto.request.TransferProcessRequest;
 import com.finte.sigapp.dto.request.TransferRequest;
 import com.finte.sigapp.dto.request.TransferSignRequest;
@@ -7,26 +8,30 @@ import com.finte.sigapp.dto.response.ObjectListResponse;
 import com.finte.sigapp.dto.response.ObjectResponse;
 import com.finte.sigapp.dto.response.TransferCreatedResponse;
 import com.finte.sigapp.dto.response.TransferDetailResponse;
+import com.finte.sigapp.dto.response.TransferItemResponse;
 import com.finte.sigapp.dto.response.TransferResponse;
+import com.finte.sigapp.dto.response.TransferSignatureResponse;
+import com.finte.sigapp.entity.MotrfirmEntity;
 import com.finte.sigapp.entity.MovitrasEntity;
 import com.finte.sigapp.exception.BussinessException;
 import com.finte.sigapp.model.MovitrasTraspasoModel;
+import com.finte.sigapp.repository.MotrfirmRepository;
 import com.finte.sigapp.repository.MovitrasRepository;
 import com.finte.sigapp.repository.TransferJpaRepository;
 import com.finte.sigapp.repository.TransferRepository;
 import com.finte.sigapp.security.JwtTokenProvider;
 import com.finte.sigapp.service.impl.TransferServiceImpl;
 import com.finte.sigapp.utils.FirmaUtil;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -44,7 +49,12 @@ class TransferServiceImplTest {
     private static final String BEARER = "Bearer token-jwt";
     private static final String TOKEN = "token-jwt";
     private static final String USUARIO = "USER_01";
+
     private static final int MAX_BYTES_FIRMA = 512_000;
+    private static final int MAX_ARTICULOS = 50;
+
+    /** Numero de tramite: el identificador con el que opera todo el modulo. */
+    private static final Long TRAMITE = 8801L;
 
     @Mock
     private TransferRepository repository;
@@ -56,21 +66,27 @@ class TransferServiceImplTest {
     private MovitrasRepository movitrasRepository;
 
     @Mock
+    private MotrfirmRepository motrfirmRepository;
+
+    @Mock
     private JwtTokenProvider tokenProvider;
 
-    /**
-     * Se inyecta la implementacion real, no un mock: la validacion de la firma es
-     * parte del comportamiento que se quiere verificar en registrarFirma.
-     */
-    @Spy
-    private FirmaUtil firmaUtil = new FirmaUtil(MAX_BYTES_FIRMA);
-
-    @InjectMocks
     private TransferServiceImpl service;
 
-    /** PNG minimo: solo la cabecera, que es lo unico que valida FirmaUtil. */
-    private static byte[] pngValido() {
-        return new byte[] { (byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D };
+    /**
+     * El service recibe el tope por constructor, asi que se arma a mano en vez de
+     * con @InjectMocks. FirmaUtil va real: su validacion es parte del
+     * comportamiento que se quiere verificar en registrarFirma.
+     */
+    @BeforeEach
+    void setUp() {
+        service = new TransferServiceImpl(repository,
+                transferJpaRepository,
+                movitrasRepository,
+                motrfirmRepository,
+                tokenProvider,
+                new FirmaUtil(MAX_BYTES_FIRMA),
+                MAX_ARTICULOS);
     }
 
     /** El service resuelve el usuario desde el header Authorization. */
@@ -79,41 +95,124 @@ class TransferServiceImplTest {
         when(tokenProvider.getUsernameFromJWT(TOKEN)).thenReturn(USUARIO);
     }
 
-    private TransferRequest requestValido() {
+    /** PNG minimo: solo la cabecera, que es lo unico que valida FirmaUtil. */
+    private static byte[] pngValido() {
+        return new byte[] { (byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D };
+    }
+
+    private static TransferItemRequest articulo(String codigo, String placa) {
+        return new TransferItemRequest(codigo, placa);
+    }
+
+    private TransferRequest requestValido(TransferItemRequest... articulos) {
         TransferRequest req = new TransferRequest();
         req.setEmpresa("001");
         req.setPersonaFuente("PER_FUENTE");
         req.setPersonaDestino("PER_DESTINO");
-        req.setElemento("ART_001");
-        req.setPlaca("PLACA_001");
         req.setObservacion("Cambio de responsable");
+        req.setArticulos(new ArrayList<>(List.of(articulos)));
         return req;
     }
 
-    @Test
-    @DisplayName("crearSolicitud devuelve code 0 y la llave del documento generado")
-    void crearSolicitud_DevuelveIdGenerado() {
-        stubUsuarioDelToken();
-
-        TransferCreatedResponse creado = TransferCreatedResponse.builder()
-                .id(100L)
+    private TransferCreatedResponse creado() {
+        return TransferCreatedResponse.builder()
+                .id(TRAMITE)
                 .empresaDocumento("001")
                 .tipoDocumento("RQTR")
                 .numeroDocumento(new BigDecimal("4501"))
                 .build();
+    }
 
-        when(repository.crearSolicitud(eq("001"), eq("PER_FUENTE"), eq("PER_DESTINO"), eq("ART_001"),
-                eq("PLACA_001"), any(), isNull(), eq(USUARIO)))
-                .thenReturn(creado);
+    private void stubCreacionOk() {
+        when(repository.crearSolicitud(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(creado());
+    }
 
-        ObjectResponse res = service.crearSolicitud(requestValido(), BEARER);
+    // ------------------------------------------------------------------ crear
+
+    @Test
+    @DisplayName("crearSolicitud abre el tramite con el primer articulo y agrega el resto")
+    void crearSolicitud_AgregaLosArticulosRestantes() {
+        stubUsuarioDelToken();
+        stubCreacionOk();
+
+        TransferRequest req = requestValido(
+                articulo("ART-0012", "PL-771"),
+                articulo("ART-0034", "PL-802"),
+                articulo("ART-0090", null));
+
+        ObjectResponse res = service.crearSolicitud(req, BEARER);
 
         assertEquals(CODE_OK, res.getCode());
+        assertEquals(TRAMITE, ((TransferCreatedResponse) res.getObject()).getId());
 
-        TransferCreatedResponse cuerpo = (TransferCreatedResponse) res.getObject();
-        assertEquals(100L, cuerpo.getId());
-        assertEquals("RQTR", cuerpo.getTipoDocumento());
-        assertEquals(new BigDecimal("4501"), cuerpo.getNumeroDocumento());
+        // El primero abre el tramite: va en crearSolicitud, no en agregarArticulo.
+        verify(repository).crearSolicitud(eq("001"), eq("PER_FUENTE"), eq("PER_DESTINO"),
+                eq("ART-0012"), eq("PL-771"), eq("Cambio de responsable"), isNull(), eq(USUARIO));
+
+        verify(repository).agregarArticulo(TRAMITE, "ART-0034", "PL-802", USUARIO);
+        // Placa nula normalizada a punto, igual que ACTIFIJO.
+        verify(repository).agregarArticulo(TRAMITE, "ART-0090", ".", USUARIO);
+        verify(repository, times(2)).agregarArticulo(anyLong(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("crearSolicitud con un solo articulo no llama a agregarArticulo")
+    void crearSolicitud_UnSoloArticulo() {
+        stubUsuarioDelToken();
+        stubCreacionOk();
+
+        ObjectResponse res = service.crearSolicitud(requestValido(articulo("ART-0012", "PL-771")), BEARER);
+
+        assertEquals(CODE_OK, res.getCode());
+        verify(repository, never()).agregarArticulo(anyLong(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("crearSolicitud rechaza el mismo activo repetido sin abrir documento")
+    void crearSolicitud_RechazaArticuloRepetido() {
+        stubUsuarioDelToken();
+
+        TransferRequest req = requestValido(
+                articulo("ART-0034", "PL-802"),
+                articulo("ART-0034", "PL-802"));
+
+        ObjectResponse res = service.crearSolicitud(req, BEARER);
+
+        assertEquals(CODE_ERROR, res.getCode());
+        assertTrue(res.getMsg().contains("repetido"));
+        verify(repository, never()).crearSolicitud(any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("crearSolicitud acepta el mismo articulo con placas distintas: son dos elementos")
+    void crearSolicitud_AceptaMismoArticuloConPlacasDistintas() {
+        stubUsuarioDelToken();
+        stubCreacionOk();
+
+        TransferRequest req = requestValido(
+                articulo("ART-0034", "PL-802"),
+                articulo("ART-0034", "PL-803"));
+
+        assertEquals(CODE_OK, service.crearSolicitud(req, BEARER).getCode());
+        verify(repository).agregarArticulo(TRAMITE, "ART-0034", "PL-803", USUARIO);
+    }
+
+    @Test
+    @DisplayName("crearSolicitud rechaza superar el tope de articulos")
+    void crearSolicitud_RechazaSuperarElTope() {
+        stubUsuarioDelToken();
+
+        TransferItemRequest[] muchos = new TransferItemRequest[MAX_ARTICULOS + 1];
+        for (int i = 0; i < muchos.length; i++) {
+            muchos[i] = articulo("ART-" + i, "PL-" + i);
+        }
+
+        ObjectResponse res = service.crearSolicitud(requestValido(muchos), BEARER);
+
+        assertEquals(CODE_ERROR, res.getCode());
+        assertTrue(res.getMsg().contains(String.valueOf(MAX_ARTICULOS)));
+        verify(repository, never()).crearSolicitud(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -121,7 +220,7 @@ class TransferServiceImplTest {
     void crearSolicitud_RechazaFuenteIgualDestino() {
         stubUsuarioDelToken();
 
-        TransferRequest req = requestValido();
+        TransferRequest req = requestValido(articulo("ART-0012", "PL-771"));
         req.setPersonaDestino(req.getPersonaFuente());
 
         ObjectResponse res = service.crearSolicitud(req, BEARER);
@@ -132,30 +231,33 @@ class TransferServiceImplTest {
     }
 
     @Test
-    @DisplayName("crearSolicitud devuelve code -1 si el procedimiento no retorna id")
-    void crearSolicitud_DevuelveErrorSiProcedimientoNoRetornaId() {
+    @DisplayName("crearSolicitud devuelve code -1 si el procedimiento no retorna el numero de tramite")
+    void crearSolicitud_DevuelveErrorSiNoRetornaNumero() {
         stubUsuarioDelToken();
 
         when(repository.crearSolicitud(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(null);
 
-        ObjectResponse res = service.crearSolicitud(requestValido(), BEARER);
+        ObjectResponse res = service.crearSolicitud(requestValido(articulo("ART-0012", "PL-771")), BEARER);
 
         assertEquals(CODE_ERROR, res.getCode());
-        assertTrue(res.getMsg().contains("no retorno ID"));
+        assertTrue(res.getMsg().contains("numero de tramite"));
+        verify(repository, never()).agregarArticulo(anyLong(), any(), any(), any());
     }
 
+    // ---------------------------------------------------------------- bandeja
+
     @Test
-    @DisplayName("listarSolicitudes con 'pr' consulta todos los estados ya procesados")
-    void listarSolicitudes_FiltraCorrectamentePorProcesados() {
+    @DisplayName("listarSolicitudes con 'pr' consulta ap, na y re, y devuelve solo la referencia del tramite")
+    void listarSolicitudes_ProcesadosSonTresEstados() {
         MovitrasTraspasoModel model = new MovitrasTraspasoModel();
-        model.setMotridmt(10L);
-        model.setMotresta("ap");
-        model.setMotrobse("Traspaso por cambio de responsable");
+        model.setMotrnutr(TRAMITE);
+        model.setMotrdrtd("RQTR");
+        model.setMotrdrnd(new BigDecimal("4501"));
         model.setMotrfecr(LocalDateTime.now());
 
         when(transferJpaRepository.buscarPorEstados(
-                argThat(estados -> estados.containsAll(List.of("ap", "na", "af", "ad", "re"))),
+                argThat(estados -> estados.size() == 3 && estados.containsAll(List.of("ap", "na", "re"))),
                 eq("001"), eq("BOD_01")))
                 .thenReturn(List.of(model));
 
@@ -165,9 +267,12 @@ class TransferServiceImplTest {
         assertEquals(1, res.getList().size());
 
         TransferResponse fila = (TransferResponse) res.getList().get(0);
-        assertEquals(10L, fila.getId());
-        assertEquals("ap", fila.getEstado());
-        assertEquals("Traspaso por cambio de responsable", fila.getObservacion());
+        // El id de la bandeja es el numero de TRAMITE (MOTRNUTR), que es lo que va
+        // en {id} del resto de rutas. numeroDocumento es otra secuencia: el
+        // RESUNUME de la requisicion en el ERP.
+        assertEquals(TRAMITE, fila.getId());
+        assertEquals("RQTR", fila.getTipoDocumento());
+        assertEquals(new BigDecimal("4501"), fila.getNumeroDocumento());
         assertNotNull(fila.getFechaCreacion());
     }
 
@@ -183,37 +288,89 @@ class TransferServiceImplTest {
         verify(transferJpaRepository, times(1)).buscarPorEstados(List.of("pe"), null, null);
     }
 
+    // ---------------------------------------------------------------- detalle
+
+    private MovitrasEntity linea(Long id, String articulo, String placa) {
+        MovitrasEntity e = new MovitrasEntity();
+        e.setMotridmt(id);
+        e.setMotrnutr(TRAMITE);
+        e.setMotresta("ap");
+        e.setMotrarti(articulo);
+        e.setMotrplac(placa);
+        e.setMotrpefu("PER_FUENTE");
+        e.setMotrpede("PER_DESTINO");
+        return e;
+    }
+
+    private MotrfirmEntity firma(int posicion, String persona, byte[] imagen) {
+        MotrfirmEntity f = new MotrfirmEntity();
+        f.setMofinutr(TRAMITE);
+        f.setMofiposi(posicion);
+        f.setMoficodi(persona);
+        if (imagen != null) {
+            f.setMofifipe(imagen);
+            f.setMofifefi(LocalDateTime.now());
+        }
+        return f;
+    }
+
     @Test
-    @DisplayName("obtenerDetalle devuelve las firmas del traspaso")
-    void obtenerDetalle_DevuelveFirmas() {
-        MovitrasEntity entity = new MovitrasEntity();
-        entity.setMotridmt(77L);
-        entity.setMotresta("ad");
-        entity.setMotrfifu(pngValido());
-        entity.setMotrfide(null);
+    @DisplayName("obtenerDetalle devuelve las N lineas y las dos firmas con su imagen")
+    void obtenerDetalle_DevuelveArticulosYFirmas() {
+        when(movitrasRepository.findByMotrnutrOrderByMotridmt(TRAMITE))
+                .thenReturn(List.of(linea(4501L, "ART-0012", "PL-771"),
+                                    linea(4502L, "ART-0090", ".")));
 
-        when(movitrasRepository.findById(77L)).thenReturn(Optional.of(entity));
+        when(motrfirmRepository.findByMofinutrOrderByMofiposi(TRAMITE))
+                .thenReturn(List.of(firma(1, "PER_FUENTE", null),
+                                    firma(2, "PER_DESTINO", pngValido())));
 
-        ObjectResponse res = service.obtenerDetalle(77L);
+        ObjectResponse res = service.obtenerDetalle(TRAMITE);
 
         assertEquals(CODE_OK, res.getCode());
         TransferDetailResponse detalle = (TransferDetailResponse) res.getObject();
-        assertEquals(77L, detalle.getId());
-        // Se guarda en BLOB pero el detalle lo expone en base64.
-        assertEquals(Base64.getEncoder().encodeToString(pngValido()), detalle.getFirmaFuente());
-        assertNull(detalle.getFirmaDestino(), "Sin firmar, la firma viaja como null, no como cadena vacia");
+
+        assertEquals(TRAMITE, detalle.getId());
+        assertEquals(2, detalle.getArticulos().size());
+
+        TransferItemResponse primero = detalle.getArticulos().get(0);
+        assertEquals("ART-0012", primero.getArticulo());
+        assertEquals("PL-771", primero.getPlaca());
+
+        // Todo lo de las firmas vive en firmas[]: la cabecera no repite fechas ni
+        // saca las imagenes a campos sueltos.
+        assertEquals(2, detalle.getFirmas().size());
+
+        TransferSignatureResponse fuente = detalle.getFirmas().get(0);
+        assertEquals(1, fuente.getPosicion());
+        assertEquals("FU", fuente.getTipo());
+        assertFalse(fuente.isFirmada(), "La fuente aun no ha firmado");
+        assertNull(fuente.getFechaFirma());
+        assertNull(fuente.getFirma(), "Sin firmar no hay imagen que devolver");
+
+        // El destino firmo primero: no hay orden entre las dos.
+        TransferSignatureResponse destino = detalle.getFirmas().get(1);
+        assertEquals(2, destino.getPosicion());
+        assertEquals("DE", destino.getTipo());
+        assertTrue(destino.isFirmada());
+        assertNotNull(destino.getFechaFirma());
+        // La imagen viaja en base64 para que el front la pinte sin otra peticion.
+        assertEquals(Base64.getEncoder().encodeToString(pngValido()), destino.getFirma());
     }
 
     @Test
     @DisplayName("obtenerDetalle devuelve code -1 cuando el traspaso no existe")
     void obtenerDetalle_DevuelveErrorSiNoExiste() {
-        when(movitrasRepository.findById(999L)).thenReturn(Optional.empty());
+        when(movitrasRepository.findByMotrnutrOrderByMotridmt(999L)).thenReturn(List.of());
 
         ObjectResponse res = service.obtenerDetalle(999L);
 
         assertEquals(CODE_ERROR, res.getCode());
         assertTrue(res.getMsg().contains("999"));
+        verify(motrfirmRepository, never()).findByMofinutrOrderByMofiposi(anyLong());
     }
+
+    // --------------------------------------------------------------- procesar
 
     @Test
     @DisplayName("procesarTraspaso exige observacion al rechazar")
@@ -224,7 +381,7 @@ class TransferServiceImplTest {
         req.setEstado("na");
         req.setObservacion("   ");
 
-        ObjectResponse res = service.procesarTraspaso(1L, req, BEARER);
+        ObjectResponse res = service.procesarTraspaso(TRAMITE, req, BEARER);
 
         assertEquals(CODE_ERROR, res.getCode());
         assertTrue(res.getMsg().contains("observacion"));
@@ -232,7 +389,7 @@ class TransferServiceImplTest {
     }
 
     @Test
-    @DisplayName("procesarTraspaso delega la aprobacion en el paquete PL/SQL")
+    @DisplayName("procesarTraspaso aprueba el tramite completo por su numero")
     void procesarTraspaso_LlamaProcedimientoExitosamente() {
         stubUsuarioDelToken();
 
@@ -240,30 +397,45 @@ class TransferServiceImplTest {
         req.setEstado("ap");
         req.setObservacion("Aprobado según revisión");
 
-        ObjectResponse res = service.procesarTraspaso(1L, req, BEARER);
+        ObjectResponse res = service.procesarTraspaso(TRAMITE, req, BEARER);
 
         assertEquals(CODE_OK, res.getCode());
-        verify(repository, times(1)).aprobarRechazar(1L, "ap", "Aprobado según revisión", USUARIO);
+        verify(repository, times(1)).aprobarRechazar(TRAMITE, "ap", "Aprobado según revisión", USUARIO);
     }
 
-    private TransferSignRequest firmaRequest(String base64) {
+    // ----------------------------------------------------------------- firmas
+
+    private TransferSignRequest firmaRequest(String tipo, String base64) {
         TransferSignRequest req = new TransferSignRequest();
-        req.setTipoFirma("FU");
+        req.setTipoFirma(tipo);
         req.setFirma(base64);
         return req;
     }
 
     @Test
-    @DisplayName("registrarFirma decodifica el base64 y entrega los bytes al paquete PL/SQL")
+    @DisplayName("registrarFirma decodifica el base64 y entrega los bytes al paquete")
     void registrarFirma_DelegaEnRepositorio() {
         stubUsuarioDelToken();
 
         String base64 = Base64.getEncoder().encodeToString(pngValido());
 
-        ObjectResponse res = service.registrarFirma(5L, firmaRequest(base64), BEARER);
+        ObjectResponse res = service.registrarFirma(TRAMITE, firmaRequest("FU", base64), BEARER);
 
         assertEquals(CODE_OK, res.getCode());
-        verify(repository, times(1)).registrarFirma(5L, "FU", pngValido(), USUARIO);
+        verify(repository, times(1)).registrarFirma(TRAMITE, "FU", pngValido(), USUARIO);
+    }
+
+    @Test
+    @DisplayName("registrarFirma acepta que el destino firme primero: no hay orden")
+    void registrarFirma_AceptaDestinoPrimero() {
+        stubUsuarioDelToken();
+
+        String base64 = Base64.getEncoder().encodeToString(pngValido());
+
+        ObjectResponse res = service.registrarFirma(TRAMITE, firmaRequest("DE", base64), BEARER);
+
+        assertEquals(CODE_OK, res.getCode());
+        verify(repository, times(1)).registrarFirma(TRAMITE, "DE", pngValido(), USUARIO);
     }
 
     @Test
@@ -273,17 +445,17 @@ class TransferServiceImplTest {
 
         String base64 = "data:image/png;base64," + Base64.getEncoder().encodeToString(pngValido());
 
-        ObjectResponse res = service.registrarFirma(5L, firmaRequest(base64), BEARER);
+        ObjectResponse res = service.registrarFirma(TRAMITE, firmaRequest("FU", base64), BEARER);
 
         assertEquals(CODE_OK, res.getCode());
         // El prefijo no llega a la BD: se guardan solo los bytes de la imagen.
-        verify(repository, times(1)).registrarFirma(5L, "FU", pngValido(), USUARIO);
+        verify(repository, times(1)).registrarFirma(TRAMITE, "FU", pngValido(), USUARIO);
     }
 
     @Test
     @DisplayName("registrarFirma rechaza un base64 invalido sin llamar al paquete")
     void registrarFirma_RechazaBase64Invalido() {
-        ObjectResponse res = service.registrarFirma(5L, firmaRequest("no-es-base64-***"), BEARER);
+        ObjectResponse res = service.registrarFirma(TRAMITE, firmaRequest("FU", "no-es-base64-***"), BEARER);
 
         assertEquals(CODE_ERROR, res.getCode());
         assertTrue(res.getMsg().contains("base64"));
@@ -295,7 +467,7 @@ class TransferServiceImplTest {
     void registrarFirma_RechazaContenidoQueNoEsImagen() {
         String base64 = Base64.getEncoder().encodeToString("esto no es una imagen".getBytes());
 
-        ObjectResponse res = service.registrarFirma(5L, firmaRequest(base64), BEARER);
+        ObjectResponse res = service.registrarFirma(TRAMITE, firmaRequest("FU", base64), BEARER);
 
         assertEquals(CODE_ERROR, res.getCode());
         assertTrue(res.getMsg().contains("PNG"));
@@ -303,22 +475,21 @@ class TransferServiceImplTest {
     }
 
     @Test
-    @DisplayName("obtenerFirma devuelve los bytes de la parte solicitada")
-    void obtenerFirma_DevuelveLosBytesDeLaParte() {
-        MovitrasEntity entity = new MovitrasEntity();
-        entity.setMotridmt(5L);
-        entity.setMotrfifu(pngValido());
+    @DisplayName("obtenerFirma lee la posicion correspondiente al tipo")
+    void obtenerFirma_LeeLaPosicionDelTipo() {
+        when(motrfirmRepository.findByMofinutrAndMofiposi(TRAMITE, 1))
+                .thenReturn(Optional.of(firma(1, "PER_FUENTE", pngValido())));
+        when(motrfirmRepository.findByMofinutrAndMofiposi(TRAMITE, 2))
+                .thenReturn(Optional.of(firma(2, "PER_DESTINO", null)));
 
-        when(movitrasRepository.findById(5L)).thenReturn(Optional.of(entity));
-
-        assertArrayEquals(pngValido(), service.obtenerFirma(5L, "fu"));
-        assertNull(service.obtenerFirma(5L, "DE"), "El destino aun no ha firmado");
+        assertArrayEquals(pngValido(), service.obtenerFirma(TRAMITE, "fu"));
+        assertNull(service.obtenerFirma(TRAMITE, "DE"), "El destino aun no ha firmado");
     }
 
     @Test
     @DisplayName("obtenerFirma devuelve null cuando el traspaso no existe")
     void obtenerFirma_DevuelveNullSiNoExisteElTraspaso() {
-        when(movitrasRepository.findById(999L)).thenReturn(Optional.empty());
+        when(motrfirmRepository.findByMofinutrAndMofiposi(999L, 1)).thenReturn(Optional.empty());
 
         assertNull(service.obtenerFirma(999L, "FU"));
     }
@@ -326,18 +497,20 @@ class TransferServiceImplTest {
     @Test
     @DisplayName("obtenerFirma rechaza un tipo de firma distinto de FU o DE")
     void obtenerFirma_RechazaTipoInvalido() {
-        assertThrows(BussinessException.class, () -> service.obtenerFirma(5L, "XX"));
-        verify(movitrasRepository, never()).findById(anyLong());
+        assertThrows(BussinessException.class, () -> service.obtenerFirma(TRAMITE, "XX"));
+        verify(motrfirmRepository, never()).findByMofinutrAndMofiposi(anyLong(), anyInt());
     }
 
+    // --------------------------------------------------------------- recibir
+
     @Test
-    @DisplayName("recibir cierra el traspaso delegando en el paquete PL/SQL")
+    @DisplayName("recibir cierra el traspaso delegando en el paquete, que genera el inventario")
     void recibir_DelegaEnRepositorio() {
         stubUsuarioDelToken();
 
-        ObjectResponse res = service.recibir(5L, BEARER);
+        ObjectResponse res = service.recibir(TRAMITE, BEARER);
 
         assertEquals(CODE_OK, res.getCode());
-        verify(repository, times(1)).recibir(5L, USUARIO);
+        verify(repository, times(1)).recibir(TRAMITE, USUARIO);
     }
 }

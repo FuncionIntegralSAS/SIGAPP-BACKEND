@@ -1,9 +1,11 @@
 --------------------------------------------------------------------------------
--- Sinonimos y permisos de FI_MOVITRAS
+-- Sinonimos y permisos del modulo de traspasos
+--
+-- Cubre los cinco objetos propios: las dos tablas (FI_MOVITRAS, FI_MOTRFIRM),
+-- las dos secuencias (FI_MOVITRAS_SEQ, FI_TRASPASO_SEQ) y el paquete.
 --
 -- Los objetos del modulo se crean en SRFPNACUA (dueno), pero ARQGUIPNACUA debe
--- poder verlos y operarlos con el nombre corto FI_MOVITRAS, sin calificar el
--- esquema.
+-- poder verlos y operarlos con el nombre corto, sin calificar el esquema.
 --
 -- Este script va aparte de 01_FI_MOVITRAS.sql porque exige privilegios que el
 -- dueno no necesariamente tiene: crear un sinonimo dentro de otro esquema
@@ -25,10 +27,13 @@
 -- concede el acceso.
 --------------------------------------------------------------------------------
 GRANT SELECT, INSERT, UPDATE, DELETE ON SRFPNACUA.FI_MOVITRAS TO ARQGUIPNACUA;
+GRANT SELECT, INSERT, UPDATE, DELETE ON SRFPNACUA.FI_MOTRFIRM TO ARQGUIPNACUA;
 
--- La secuencia se necesita para poder insertar: MOTRIDMT se toma de
--- FI_MOVITRAS_SEQ.NEXTVAL y sobre secuencias el privilegio de uso es SELECT.
+-- Las secuencias se necesitan para poder insertar: MOTRIDMT sale de
+-- FI_MOVITRAS_SEQ y MOTRNUTR de FI_TRASPASO_SEQ. Sobre secuencias el privilegio
+-- de uso es SELECT.
 GRANT SELECT ON SRFPNACUA.FI_MOVITRAS_SEQ TO ARQGUIPNACUA;
+GRANT SELECT ON SRFPNACUA.FI_TRASPASO_SEQ TO ARQGUIPNACUA;
 
 -- El paquete es la via normal de escritura del modulo (crea el REQUSUMI y aplica
 -- las validaciones de estado). Si ARQGUIPNACUA va a operar traspasos, deberia
@@ -42,7 +47,9 @@ GRANT EXECUTE ON SRFPNACUA.PKG_FI_MOVITRAS TO ARQGUIPNACUA;
 -- con la misma conexion.
 --------------------------------------------------------------------------------
 CREATE OR REPLACE SYNONYM ARQGUIPNACUA.FI_MOVITRAS     FOR SRFPNACUA.FI_MOVITRAS;
+CREATE OR REPLACE SYNONYM ARQGUIPNACUA.FI_MOTRFIRM     FOR SRFPNACUA.FI_MOTRFIRM;
 CREATE OR REPLACE SYNONYM ARQGUIPNACUA.FI_MOVITRAS_SEQ FOR SRFPNACUA.FI_MOVITRAS_SEQ;
+CREATE OR REPLACE SYNONYM ARQGUIPNACUA.FI_TRASPASO_SEQ FOR SRFPNACUA.FI_TRASPASO_SEQ;
 CREATE OR REPLACE SYNONYM ARQGUIPNACUA.PKG_FI_MOVITRAS FOR SRFPNACUA.PKG_FI_MOVITRAS;
 
 --------------------------------------------------------------------------------
@@ -53,7 +60,9 @@ CREATE OR REPLACE SYNONYM ARQGUIPNACUA.PKG_FI_MOVITRAS FOR SRFPNACUA.PKG_FI_MOVI
 -- ambas.
 --------------------------------------------------------------------------------
 -- CREATE OR REPLACE SYNONYM FI_MOVITRAS     FOR SRFPNACUA.FI_MOVITRAS;
+-- CREATE OR REPLACE SYNONYM FI_MOTRFIRM     FOR SRFPNACUA.FI_MOTRFIRM;
 -- CREATE OR REPLACE SYNONYM FI_MOVITRAS_SEQ FOR SRFPNACUA.FI_MOVITRAS_SEQ;
+-- CREATE OR REPLACE SYNONYM FI_TRASPASO_SEQ FOR SRFPNACUA.FI_TRASPASO_SEQ;
 -- CREATE OR REPLACE SYNONYM PKG_FI_MOVITRAS FOR SRFPNACUA.PKG_FI_MOVITRAS;
 
 --------------------------------------------------------------------------------
@@ -62,16 +71,18 @@ CREATE OR REPLACE SYNONYM ARQGUIPNACUA.PKG_FI_MOVITRAS FOR SRFPNACUA.PKG_FI_MOVI
 -- Conectado como ARQGUIPNACUA, esto debe devolver una fila y no fallar:
 --
 --   SELECT COUNT(*) FROM FI_MOVITRAS;
+--   SELECT COUNT(*) FROM FI_MOTRFIRM;
 --
 -- Para confirmar a donde apunta el sinonimo:
 --
 --   SELECT synonym_name, table_owner, table_name
 --     FROM all_synonyms
---    WHERE synonym_name IN ('FI_MOVITRAS','FI_MOVITRAS_SEQ','PKG_FI_MOVITRAS');
+--    WHERE synonym_name IN ('FI_MOVITRAS','FI_MOTRFIRM','FI_MOVITRAS_SEQ',
+--                           'FI_TRASPASO_SEQ','PKG_FI_MOVITRAS');
 --
 -- Para revisar que privilegios quedaron concedidos:
 --
 --   SELECT grantee, table_name, privilege
 --     FROM all_tab_privs
---    WHERE table_name = 'FI_MOVITRAS';
+--    WHERE table_name IN ('FI_MOVITRAS','FI_MOTRFIRM');
 --------------------------------------------------------------------------------

@@ -6,6 +6,6 @@ import com.finte.sigapp.dto.response.ConteoFisicoResponse;
 
 public interface ConteoFisicoService {
     ConteoFisicoResponse generarConteoFisico(ConteoFisicoRequest request);
-
+    
     ConteoFisicoResponse cerrarConteo(String bearerToken, CierreConteoRequest request);
 }
