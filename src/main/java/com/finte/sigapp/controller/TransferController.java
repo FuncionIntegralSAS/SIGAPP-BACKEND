@@ -29,7 +29,12 @@ public class TransferController {
 
     private final TransferService transferService;
 
-    @Operation(summary = "Crear traspaso", description = "Registra un traspaso en estado pendiente")
+    /**
+     * El {@code id} que devuelve este endpoint es el NUMERO DE TRAMITE, y es el
+     * que se usa en {@code {id}} del resto de rutas.
+     */
+    @Operation(summary = "Crear traspaso",
+               description = "Registra un traspaso pendiente con uno o varios articulos y un solo documento")
     @PostMapping("/crear")
     public ResponseEntity<ObjectResponse> createTransfer(@Parameter(hidden = true) @RequestHeader("Authorization") String bearerToken,
                                                          @Valid @RequestBody TransferRequest request) {
@@ -49,10 +54,12 @@ public class TransferController {
     }
 
     /**
-     * Bandeja de traspasos.
+     * Bandeja de traspasos: una fila por TRAMITE, no por articulo.
      *
-     * @param estado "pe" pendientes, "pr" procesados (ap, na, af, ad, re) o un
-     *               estado puntual de FI_MOVITRAS
+     * @param estado "pe" pendientes, "pr" procesados (ap, na, re) o un estado
+     *               puntual de FI_MOVITRAS
+     * @param bodega opcional. El tramite aparece si CUALQUIERA de sus articulos
+     *               esta en esa bodega
      */
     @Operation(summary = "Listar traspasos", description = "Bandeja filtrada por estado, con empresa y bodega opcionales")
     @GetMapping("/list")
@@ -75,52 +82,62 @@ public class TransferController {
         }
     }
 
-    @Operation(summary = "Detalle de un traspaso", description = "Incluye las firmas en base64")
+    @Operation(summary = "Detalle de un traspaso", description = "Cabecera, articulos y las dos firmas en base64")
     @GetMapping("get/{id}")
-    public ResponseEntity<ObjectResponse> getTransfer(@PathVariable Long id) {
+    public ResponseEntity<ObjectResponse> getTransfer(@PathVariable("id") Long numeroTramite) {
 
         ObjectResponse response = new ObjectResponse();
         try {
-            response = transferService.obtenerDetalle(id);
+            response = transferService.obtenerDetalle(numeroTramite);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("Error consultando el traspaso {}: {}", id, e.getMessage(), e);
+            log.error("Error consultando el traspaso {}: {}", numeroTramite, e.getMessage(), e);
             response.setCode(-1);
             response.setMsg(MSG_ERROR + e.getMessage());
             return ResponseEntity.status(500).body(response);
         }
     }
 
-    @Operation(summary = "Aprobar o rechazar", description = "Mueve el traspaso a 'ap' o 'na'")
+    /**
+     * El tramite se aprueba o se rechaza COMPLETO: no existe aprobacion por
+     * articulo. Aprobar no toca el inventario, solo autoriza el tramite.
+     */
+    @Operation(summary = "Aprobar o rechazar",
+               description = "Mueve el traspaso completo a 'ap' o 'na'. No genera documento de inventario")
     @PostMapping("process/{id}")
     public ResponseEntity<ObjectResponse> processTransfer(@Parameter(hidden = true) @RequestHeader("Authorization") String bearerToken,
-                                                          @PathVariable Long id,
+                                                          @PathVariable("id") Long numeroTramite,
                                                           @Valid @RequestBody TransferProcessRequest request) {
 
         ObjectResponse response = new ObjectResponse();
         try {
-            response = transferService.procesarTraspaso(id, request, bearerToken);
+            response = transferService.procesarTraspaso(numeroTramite, request, bearerToken);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("Error procesando el traspaso {}: {}", id, e.getMessage(), e);
+            log.error("Error procesando el traspaso {}: {}", numeroTramite, e.getMessage(), e);
             response.setCode(-1);
             response.setMsg(MSG_ERROR + e.getMessage());
             return ResponseEntity.status(500).body(response);
         }
     }
 
-    @Operation(summary = "Registrar firma", description = "Guarda la firma de la fuente (FU) o del destino (DE)")
+    /**
+     * No hay orden entre las dos firmas: cualquiera puede registrarse primero, y
+     * ninguna mueve el estado del tramite.
+     */
+    @Operation(summary = "Registrar firma",
+               description = "Guarda la firma de la fuente (FU) o del destino (DE), en cualquier orden")
     @PutMapping("sign/{id}")
     public ResponseEntity<ObjectResponse> signTransfer(@Parameter(hidden = true) @RequestHeader("Authorization") String bearerToken,
-                                                       @PathVariable Long id,
+                                                       @PathVariable("id") Long numeroTramite,
                                                        @Valid @RequestBody TransferSignRequest request) {
 
         ObjectResponse response = new ObjectResponse();
         try {
-            response = transferService.registrarFirma(id, request, bearerToken);
+            response = transferService.registrarFirma(numeroTramite, request, bearerToken);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("Error registrando la firma del traspaso {}: {}", id, e.getMessage(), e);
+            log.error("Error registrando la firma del traspaso {}: {}", numeroTramite, e.getMessage(), e);
             response.setCode(-1);
             response.setMsg(MSG_ERROR + e.getMessage());
             return ResponseEntity.status(500).body(response);
@@ -139,11 +156,11 @@ public class TransferController {
     @Operation(summary = "Ver la firma", description = "Devuelve la imagen de la firma (FU fuente, DE destino)")
     @GetMapping("sign/{id}/{tipo}")
     public ResponseEntity<byte[]> getSignature(@Parameter(hidden = true) @RequestHeader("Authorization") String bearerToken,
-                                               @PathVariable Long id,
+                                               @PathVariable("id") Long numeroTramite,
                                                @PathVariable String tipo) {
 
         try {
-            byte[] firma = transferService.obtenerFirma(id, tipo);
+            byte[] firma = transferService.obtenerFirma(numeroTramite, tipo);
 
             if (firma == null || firma.length == 0) {
                 return ResponseEntity.notFound().build();
@@ -157,26 +174,32 @@ public class TransferController {
                     .body(firma);
 
         } catch (BussinessException e) {
-            log.warn("Peticion invalida de firma para el traspaso {}: {}", id, e.getMessage());
+            log.warn("Peticion invalida de firma para el traspaso {}: {}", numeroTramite, e.getMessage());
             return ResponseEntity.badRequest().build();
 
         } catch (Exception e) {
-            log.error("Error consultando la firma {} del traspaso {}: {}", tipo, id, e.getMessage(), e);
+            log.error("Error consultando la firma {} del traspaso {}: {}", tipo, numeroTramite, e.getMessage(), e);
             return ResponseEntity.status(500).build();
         }
     }
 
-    @Operation(summary = "Registrar recepción", description = "Sella la fecha de recibido y cierra el traspaso")
+    /**
+     * Cierra el ciclo. Exige las dos firmas y es AQUI donde se genera el documento
+     * de inventario: una cabecera en DOCUINVE y una linea por articulo en
+     * MOVIINVE.
+     */
+    @Operation(summary = "Registrar recepción",
+               description = "Exige las dos firmas, genera el documento de inventario y cierra el traspaso")
     @PutMapping("/recibir/{id}")
     public ResponseEntity<ObjectResponse> receiveTransfer(@Parameter(hidden = true) @RequestHeader("Authorization") String bearerToken,
-                                                          @PathVariable Long id) {
+                                                          @PathVariable("id") Long numeroTramite) {
 
         ObjectResponse response = new ObjectResponse();
         try {
-            response = transferService.recibir(id, bearerToken);
+            response = transferService.recibir(numeroTramite, bearerToken);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("Error registrando la recepcion del traspaso {}: {}", id, e.getMessage(), e);
+            log.error("Error registrando la recepcion del traspaso {}: {}", numeroTramite, e.getMessage(), e);
             response.setCode(-1);
             response.setMsg(MSG_ERROR + e.getMessage());
             return ResponseEntity.status(500).body(response);

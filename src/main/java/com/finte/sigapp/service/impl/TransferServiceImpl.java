@@ -1,5 +1,6 @@
 package com.finte.sigapp.service.impl;
 
+import com.finte.sigapp.dto.request.TransferItemRequest;
 import com.finte.sigapp.dto.request.TransferProcessRequest;
 import com.finte.sigapp.dto.request.TransferRequest;
 import com.finte.sigapp.dto.request.TransferSignRequest;
@@ -7,19 +8,23 @@ import com.finte.sigapp.dto.response.ObjectListResponse;
 import com.finte.sigapp.dto.response.ObjectResponse;
 import com.finte.sigapp.dto.response.TransferCreatedResponse;
 import com.finte.sigapp.dto.response.TransferDetailResponse;
+import com.finte.sigapp.dto.response.TransferItemResponse;
 import com.finte.sigapp.dto.response.TransferResponse;
+import com.finte.sigapp.dto.response.TransferSignatureResponse;
+import com.finte.sigapp.entity.MotrfirmEntity;
 import com.finte.sigapp.entity.MovitrasEntity;
 import com.finte.sigapp.exception.BussinessException;
 import com.finte.sigapp.exception.catalog.ErrorCode;
 import com.finte.sigapp.model.MovitrasTraspasoModel;
+import com.finte.sigapp.repository.MotrfirmRepository;
 import com.finte.sigapp.repository.MovitrasRepository;
 import com.finte.sigapp.repository.TransferJpaRepository;
 import com.finte.sigapp.repository.TransferRepository;
 import com.finte.sigapp.security.JwtTokenProvider;
 import com.finte.sigapp.service.TransferService;
 import com.finte.sigapp.utils.FirmaUtil;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -28,12 +33,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class TransferServiceImpl implements TransferService {
 
     /** Convencion de la envoltura de respuesta. */
@@ -43,13 +48,43 @@ public class TransferServiceImpl implements TransferService {
     private static final String ESTADO_PROCESADOS = "pr";
     private static final String ESTADO_APROBADO = "ap";
     private static final String ESTADO_RECHAZADO = "na";
+    private static final String ESTADO_RECIBIDO = "re";
+
+    /** Placa de los elementos que no tienen, igual que ACTIFIJO. */
+    private static final String PLACA_VACIA = ".";
 
     private final TransferRepository repository;
     private final TransferJpaRepository transferJpaRepository;
     private final MovitrasRepository movitrasRepository;
+    private final MotrfirmRepository motrfirmRepository;
     private final JwtTokenProvider tokenProvider;
     private final FirmaUtil firmaUtil;
+    private final int maxArticulos;
 
+    public TransferServiceImpl(TransferRepository repository,
+                               TransferJpaRepository transferJpaRepository,
+                               MovitrasRepository movitrasRepository,
+                               MotrfirmRepository motrfirmRepository,
+                               JwtTokenProvider tokenProvider,
+                               FirmaUtil firmaUtil,
+                               @Value("${app.traspasos.max-articulos:50}") int maxArticulos) {
+        this.repository = repository;
+        this.transferJpaRepository = transferJpaRepository;
+        this.movitrasRepository = movitrasRepository;
+        this.motrfirmRepository = motrfirmRepository;
+        this.tokenProvider = tokenProvider;
+        this.firmaUtil = firmaUtil;
+        this.maxArticulos = maxArticulos;
+    }
+
+    /**
+     * Abre el traspaso con el primer articulo y anade el resto uno a uno.
+     *
+     * Son N llamadas al paquete en vez de una con lista porque el documento
+     * REQUSUMI necesita datos que salen del activo y no se puede crear antes de
+     * conocer al menos uno. Todas van dentro de esta transaccion: si falla el
+     * tercer articulo no queda nada, ni siquiera el documento.
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ObjectResponse crearSolicitud(TransferRequest request, String bearerToken) {
@@ -61,25 +96,48 @@ public class TransferServiceImpl implements TransferService {
                     "La persona fuente y la persona destino no pueden ser la misma");
         }
 
-        // El paquete crea la requisicion en REQUSUMI y despues el traspaso, todo
-        // dentro de la misma transaccion.
+        List<TransferItemRequest> articulos = request.getArticulos();
+
+        if (articulos.size() > maxArticulos) {
+            return new ObjectResponse(CODE_ERROR,
+                    "Un traspaso no puede incluir mas de " + maxArticulos + " articulos");
+        }
+
+        String repetido = buscarRepetido(articulos);
+        if (repetido != null) {
+            return new ObjectResponse(CODE_ERROR,
+                    "El articulo " + repetido + " esta repetido en la solicitud");
+        }
+
+        TransferItemRequest primero = articulos.get(0);
+
         TransferCreatedResponse creado = repository.crearSolicitud(
                 request.getEmpresa(),
                 request.getPersonaFuente(),
                 request.getPersonaDestino(),
-                request.getElemento(),
-                request.getPlaca(),
+                primero.getArticulo(),
+                normalizarPlaca(primero.getPlaca()),
                 request.getObservacion(),
                 request.getTipoMovimiento(),
                 usuarioCrea);
 
         if (creado == null) {
             return new ObjectResponse(CODE_ERROR,
-                    "El traspaso se proceso pero el procedimiento no retorno ID");
+                    "El traspaso se proceso pero el procedimiento no retorno el numero de tramite");
         }
 
-        log.info("Traspaso {} creado sobre el documento {}-{}-{}",
-                creado.getId(), creado.getEmpresaDocumento(),
+        // El resto de articulos cuelga del tramite recien creado. El paquete valida
+        // aqui que compartan centro de informacion y tercero con el primero.
+        for (TransferItemRequest articulo : articulos.subList(1, articulos.size())) {
+            repository.agregarArticulo(
+                    creado.getId(),
+                    articulo.getArticulo(),
+                    normalizarPlaca(articulo.getPlaca()),
+                    usuarioCrea);
+        }
+
+        log.info("Traspaso {} creado con {} articulo(s) sobre el documento {}-{}-{}",
+                creado.getId(), articulos.size(), creado.getEmpresaDocumento(),
                 creado.getTipoDocumento(), creado.getNumeroDocumento());
 
         return new ObjectResponse(CODE_OK, "El traspaso fue creado correctamente", creado);
@@ -92,7 +150,9 @@ public class TransferServiceImpl implements TransferService {
 
         if (ESTADO_PROCESADOS.equalsIgnoreCase(estado)) {
             // "Procesados" agrupa todo lo que ya salio de la bandeja de pendientes.
-            estadosDb = Arrays.asList(ESTADO_APROBADO, ESTADO_RECHAZADO, "af", "ad", "re");
+            // Son tres y no cinco: af y ad desaparecieron al quitar el orden de las
+            // firmas, que ahora se consultan en FI_MOTRFIRM.
+            estadosDb = Arrays.asList(ESTADO_APROBADO, ESTADO_RECHAZADO, ESTADO_RECIBIDO);
         } else {
             estadosDb = Collections.singletonList(estado);
         }
@@ -110,21 +170,23 @@ public class TransferServiceImpl implements TransferService {
     }
 
     @Override
-    public ObjectResponse obtenerDetalle(Long idTramite) {
+    public ObjectResponse obtenerDetalle(Long numeroTramite) {
 
-        Optional<MovitrasEntity> traspaso = movitrasRepository.findById(idTramite);
+        List<MovitrasEntity> lineas = movitrasRepository.findByMotrnutrOrderByMotridmt(numeroTramite);
 
-        if (traspaso.isEmpty()) {
-            return new ObjectResponse(CODE_ERROR, "No existe el traspaso " + idTramite);
+        if (lineas.isEmpty()) {
+            return new ObjectResponse(CODE_ERROR, "No existe el traspaso " + numeroTramite);
         }
 
-        return new ObjectResponse(CODE_OK, "Consulta exitosa", mapToDetail(traspaso.get()));
+        List<MotrfirmEntity> firmas = motrfirmRepository.findByMofinutrOrderByMofiposi(numeroTramite);
+
+        return new ObjectResponse(CODE_OK, "Consulta exitosa", mapToDetail(lineas, firmas));
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ObjectResponse procesarTraspaso(Long idTramite, 
-                                           TransferProcessRequest request, 
+    public ObjectResponse procesarTraspaso(Long numeroTramite,
+                                           TransferProcessRequest request,
                                            String bearerToken) {
 
         String usuarioActualiza = obtenerUsuario(bearerToken);
@@ -133,8 +195,10 @@ public class TransferServiceImpl implements TransferService {
             return new ObjectResponse(CODE_ERROR, "Debe incluir una observacion al rechazar el traspaso");
         }
 
+        // El paquete aplica el estado a las N lineas: el tramite se aprueba o se
+        // rechaza completo, nunca por articulo.
         repository.aprobarRechazar(
-                idTramite,
+                numeroTramite,
                 request.getEstado(),
                 request.getObservacion(),
                 usuarioActualiza);
@@ -144,7 +208,7 @@ public class TransferServiceImpl implements TransferService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ObjectResponse registrarFirma(Long idTramite, TransferSignRequest request, String bearerToken) {
+    public ObjectResponse registrarFirma(Long numeroTramite, TransferSignRequest request, String bearerToken) {
 
         byte[] firma;
         try {
@@ -152,13 +216,14 @@ public class TransferServiceImpl implements TransferService {
             // hay garantia de que sea una imagen. Se normaliza antes de tocar la BD.
             firma = firmaUtil.decodificar(request.getFirma());
         } catch (BussinessException e) {
-            log.warn("Firma rechazada para el traspaso {}: {}", idTramite, e.getMessage());
+            log.warn("Firma rechazada para el traspaso {}: {}", numeroTramite, e.getMessage());
             return new ObjectResponse(CODE_ERROR, e.getMessage());
         }
 
-        // El estado del tramite y el orden de las firmas los valida el paquete.
+        // El estado del tramite y que esa posicion no este ya firmada los valida el
+        // paquete. No hay orden entre las dos firmas.
         repository.registrarFirma(
-                idTramite,
+                numeroTramite,
                 request.getTipoFirma(),
                 firma,
                 obtenerUsuario(bearerToken));
@@ -167,34 +232,68 @@ public class TransferServiceImpl implements TransferService {
     }
 
     @Override
-    public byte[] obtenerFirma(Long idTramite, String tipoFirma) {
+    @Transactional(rollbackFor = Exception.class)
+    public ObjectResponse recibir(Long numeroTramite, String bearerToken) {
 
-        String tipo = tipoFirma == null ? "" : tipoFirma.trim().toUpperCase();
+        // Es aqui donde el traspaso llega al inventario: el paquete exige las dos
+        // firmas y genera el documento con una linea por articulo.
+        repository.recibir(numeroTramite, obtenerUsuario(bearerToken));
 
-        if (!TransferRepository.FIRMA_FUENTE.equals(tipo) && !TransferRepository.FIRMA_DESTINO.equals(tipo)) {
-            throw new BussinessException(ErrorCode.SIGAPP_400,
-                    "El tipo de firma solo puede ser 'FU' (fuente) o 'DE' (destino)");
-        }
-
-        Optional<MovitrasEntity> traspaso = movitrasRepository.findById(idTramite);
-
-        if (traspaso.isEmpty()) {
-            log.warn("Se pidio la firma {} de un traspaso inexistente: {}", tipo, idTramite);
-            return null;
-        }
-
-        MovitrasEntity entity = traspaso.get();
-
-        return TransferRepository.FIRMA_FUENTE.equals(tipo) ? entity.getMotrfifu() : entity.getMotrfide();
+        return new ObjectResponse(CODE_OK, "La recepción fue registrada correctamente");
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public ObjectResponse recibir(Long idTramite, String bearerToken) {
+    public byte[] obtenerFirma(Long numeroTramite, String tipoFirma) {
 
-        repository.recibir(idTramite, obtenerUsuario(bearerToken));
+        int posicion = posicionDe(tipoFirma);
 
-        return new ObjectResponse(CODE_OK, "La recepción fue registrada correctamente");
+        return motrfirmRepository.findByMofinutrAndMofiposi(numeroTramite, posicion)
+                .map(MotrfirmEntity::getMofifipe)
+                .orElseGet(() -> {
+                    log.warn("Se pidio la firma {} de un traspaso sin esa posicion: {}",
+                            tipoFirma, numeroTramite);
+                    return null;
+                });
+    }
+
+    /**
+     * Traduce el tipo de firma que usan los endpoints a la posicion de
+     * FI_MOTRFIRM.
+     */
+    private int posicionDe(String tipoFirma) {
+        String tipo = tipoFirma == null ? "" : tipoFirma.trim().toUpperCase();
+
+        if (TransferRepository.FIRMA_FUENTE.equals(tipo)) {
+            return MotrfirmEntity.POSICION_FUENTE;
+        }
+        if (TransferRepository.FIRMA_DESTINO.equals(tipo)) {
+            return MotrfirmEntity.POSICION_DESTINO;
+        }
+        throw new BussinessException(ErrorCode.SIGAPP_400,
+                "El tipo de firma solo puede ser 'FU' (fuente) o 'DE' (destino)");
+    }
+
+    /**
+     * Primer articulo que aparece dos veces en la solicitud, o null si no hay.
+     *
+     * El paquete tambien lo rechaza y la constraint de la tabla tambien, pero
+     * cortarlo aqui evita abrir un documento REQUSUMI que despues habria que
+     * deshacer.
+     */
+    private String buscarRepetido(List<TransferItemRequest> articulos) {
+        Set<String> vistos = new HashSet<>();
+
+        for (TransferItemRequest articulo : articulos) {
+            if (!vistos.add(articulo.clave())) {
+                return articulo.getArticulo();
+            }
+        }
+        return null;
+    }
+
+    /** Los elementos sin placa la guardan como punto, igual que ACTIFIJO. */
+    private String normalizarPlaca(String placa) {
+        return StringUtils.hasText(placa) ? placa.trim() : PLACA_VACIA;
     }
 
     /**
@@ -206,63 +305,84 @@ public class TransferServiceImpl implements TransferService {
         return tokenProvider.getUsernameFromJWT(token);
     }
 
+    /**
+     * La bandeja lista y enlaza; todo lo demas lo sirve
+     * {@link #obtenerDetalle(Long)}.
+     *
+     * El {@code id} es MOTRNUTR, el numero de tramite, y es lo que va en
+     * {@code {id}} del resto de rutas. No confundirlo con
+     * {@code numeroDocumento}, que es el RESUNUME de la requisicion en el ERP:
+     * son dos secuencias distintas.
+     */
     private TransferResponse mapToResponse(MovitrasTraspasoModel model) {
         return TransferResponse.builder()
-                .id(model.getMotridmt())
-                .estado(model.getMotresta())
-                .empresaDocumento(model.getMotrdrem())
+                .id(model.getMotrnutr())
                 .tipoDocumento(model.getMotrdrtd())
                 .numeroDocumento(model.getMotrdrnd())
-                .elemento(model.getMotrarti())
-                .placaElemento(model.getMotrplac())
-                .nombreElemento(model.getNombElem())
-                .personaFuente(model.getPersFuen())
-                .personaDestino(model.getPersDest())
-                .bodegaFuente(model.getBodeFuen())
-                .bodegaDestino(model.getBodeDest())
-                .observacion(model.getMotrobse())
-                .motivoRechazo(model.getMotrmore())
                 .fechaCreacion(model.getMotrfecr())
-                .usuarioCreacion(model.getMotruscr())
-                .fechaAprobacion(model.getMotrfeap())
-                .usuarioAprobacion(model.getMotrusap())
-                .fechaAceptacionFuente(model.getMotrfafu())
-                .fechaAceptacionDestino(model.getMotrfade())
-                .fechaRecibe(model.getMotrfere())
                 .build();
     }
 
     /**
-     * Las firmas se guardan como bytes, pero el detalle las expone en base64: es lo
-     * que el front puede meter directo en un {@code <img src>} sin una peticion
-     * extra. Para servirlas como imagen esta {@link #obtenerFirma(Long, String)}.
+     * Arma el detalle a partir de las N lineas y las dos firmas.
+     *
+     * Los datos de cabecera se toman de la primera linea: de MOTRDREM a MOTRFERE
+     * todas guardan lo mismo, y el paquete se encarga de que siga siendo cierto.
      */
-    private String aBase64(byte[] firma) {
-        return firma == null || firma.length == 0 ? null : Base64.getEncoder().encodeToString(firma);
+    private TransferDetailResponse mapToDetail(List<MovitrasEntity> lineas, List<MotrfirmEntity> firmas) {
+
+        MovitrasEntity cabecera = lineas.get(0);
+
+        return TransferDetailResponse.builder()
+                .id(cabecera.getMotrnutr())
+                .estado(cabecera.getMotresta())
+                .empresaDocumento(cabecera.getMotrdrem())
+                .tipoDocumento(cabecera.getMotrdrtd())
+                .numeroDocumento(cabecera.getMotrdrnd())
+                .personaFuente(cabecera.getMotrpefu())
+                .personaDestino(cabecera.getMotrpede())
+                .observacion(cabecera.getMotrobse())
+                .motivoRechazo(cabecera.getMotrmore())
+                .fechaCreacion(cabecera.getMotrfecr())
+                .usuarioCreacion(cabecera.getMotruscr())
+                .fechaAprobacion(cabecera.getMotrfeap())
+                .usuarioAprobacion(cabecera.getMotrusap())
+                .fechaRecibe(cabecera.getMotrfere())
+                .articulos(lineas.stream().map(this::mapToItem).toList())
+                .firmas(firmas.stream().map(this::mapToSignature).toList())
+                .build();
     }
 
-    private TransferDetailResponse mapToDetail(MovitrasEntity entity) {
-        return TransferDetailResponse.builder()
-                .id(entity.getMotridmt())
-                .estado(entity.getMotresta())
-                .empresaDocumento(entity.getMotrdrem())
-                .tipoDocumento(entity.getMotrdrtd())
-                .numeroDocumento(entity.getMotrdrnd())
-                .elemento(entity.getMotrarti())
-                .placaElemento(entity.getMotrplac())
-                .personaFuente(entity.getMotrpefu())
-                .personaDestino(entity.getMotrpede())
-                .observacion(entity.getMotrobse())
-                .motivoRechazo(entity.getMotrmore())
-                .fechaCreacion(entity.getMotrfecr())
-                .usuarioCreacion(entity.getMotruscr())
-                .fechaAprobacion(entity.getMotrfeap())
-                .usuarioAprobacion(entity.getMotrusap())
-                .fechaAceptacionFuente(entity.getMotrfafu())
-                .fechaAceptacionDestino(entity.getMotrfade())
-                .fechaRecibe(entity.getMotrfere())
-                .firmaFuente(aBase64(entity.getMotrfifu()))
-                .firmaDestino(aBase64(entity.getMotrfide()))
+    private TransferItemResponse mapToItem(MovitrasEntity linea) {
+        return TransferItemResponse.builder()
+                .articulo(linea.getMotrarti())
+                .placa(linea.getMotrplac())
                 .build();
+    }
+
+    private TransferSignatureResponse mapToSignature(MotrfirmEntity firma) {
+        boolean esFuente = firma.getMofiposi() != null
+                && firma.getMofiposi() == MotrfirmEntity.POSICION_FUENTE;
+
+        return TransferSignatureResponse.builder()
+                .posicion(firma.getMofiposi())
+                .tipo(esFuente ? TransferRepository.FIRMA_FUENTE : TransferRepository.FIRMA_DESTINO)
+                .fechaFirma(firma.getMofifefi())
+                .firmada(firma.estaFirmada())
+                .firma(aBase64(firma))
+                .build();
+    }
+
+    /**
+     * Las firmas se guardan como bytes y el detalle las expone en base64: asi el
+     * front las mete directo en un {@code <img src="data:...">} y pinta la
+     * pantalla con la peticion que ya hizo, sin el fetch autenticado ni el object
+     * URL que exigiria {@link #obtenerFirma(Long, String)}.
+     */
+    private String aBase64(MotrfirmEntity firma) {
+        if (firma == null || !firma.estaFirmada()) {
+            return null;
+        }
+        return Base64.getEncoder().encodeToString(firma.getMofifipe());
     }
 }

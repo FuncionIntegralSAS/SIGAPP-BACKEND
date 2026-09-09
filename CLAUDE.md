@@ -385,3 +385,144 @@ El proyecto debe mantenerse lo más independiente posible del sistema financiero
 - Testing
 - Evolución independiente
 - Migración futura si es necesario
+
+---
+
+# Módulo de Traspasos de Activos
+
+Segundo módulo del backend (`/api/v1/traspasos`), independiente del conteo físico.
+Permite que una persona entregue **varios activos** a otra con un solo documento.
+
+📄 **El detalle completo está en `src/main/resources/db/README.md`.** Leerlo antes
+de tocar la base de datos o el paquete. Esta sección resume lo que es fácil de
+romper sin darse cuenta.
+
+## Modelo de datos
+
+```
+REQUSUMI  1 ──── N  FI_MOVITRAS      una fila POR ARTÍCULO
+MOTRNUTR  1 ──── 2  FI_MOTRFIRM      firma fuente y firma destino
+```
+
+`FI_MOVITRAS` guarda **una fila por artículo**. Hay dos números y no significan
+lo mismo:
+
+| Columna | Secuencia | Qué es |
+|---|---|---|
+| `MOTRIDMT` | `FI_MOVITRAS_SEQ` | Clave técnica de la línea. **No sale en ninguna API** |
+| `MOTRNUTR` | `FI_TRASPASO_SEQ` | **Número de trámite**. Identificador de negocio, igual en las N líneas |
+
+El `id` de todos los endpoints es `MOTRNUTR`. No confundirlo con
+`numeroDocumento`, que es el `RESUNUME` de la requisición en el ERP.
+
+## Invariantes que no se pueden romper
+
+⚠️ **Todo `UPDATE` sobre `FI_MOVITRAS` filtra por `MOTRNUTR`, nunca por
+`MOTRIDMT`.** De `MOTRDREM` a `MOTRFERE` el contenido se repite en las N líneas y
+nada estructural impide que se desvíen: la coherencia depende de esta regla.
+Consulta de control:
+
+```sql
+SELECT motrnutr, COUNT(DISTINCT motresta) FROM fi_movitras
+ GROUP BY motrnutr HAVING COUNT(DISTINCT motresta) > 1;   -- debe dar cero filas
+```
+
+⚠️ **Ningún procedimiento hace `SELECT INTO` por el identificador del trámite**:
+devolvería N filas. Se usa `pro_bloquea_tramite`, que bloquea las líneas con un
+cursor `FOR UPDATE` y luego lee la cabecera con `ROWNUM = 1`.
+
+⚠️ **`FI_MOTRFIRM` no puede llevar FK hacia el trámite.** `MOTRNUTR` se repite y
+Oracle exige unicidad en la columna referenciada (`ORA-02270`). La integridad la
+sostiene el paquete.
+
+## Ciclo de vida
+
+```
+ pe pendiente ──aprobar──▶ ap aprobado ──[dos firmas]──▶ re recibido
+      │                                                   + DOCUINVE (1 fila)
+      └──rechazar──▶ na rechazado                         + MOVIINVE (N líneas)
+```
+
+**Solo cuatro estados: `pe`, `ap`, `na`, `re`.** No existen `af` ni `ad`: al no
+haber orden entre las firmas, el avance es **dos booleanos independientes** y una
+sola columna no puede representarlos. Se consulta en `FI_MOTRFIRM.MOFIFEFI`
+(nulo = sin firmar).
+
+🔒 **REGLA DE ORO: el documento de inventario se genera al RECIBIR, nunca al
+aprobar.** Aprobar autoriza el trámite; recibir es lo que mueve el activo, y solo
+se puede recibir con las dos firmas. Un traspaso aprobado que nadie firma no deja
+rastro en `DOCUINVE` ni en `MOVIINVE`.
+
+🔒 **El trámite se aprueba o se rechaza COMPLETO.** No existe aprobación por
+artículo. Por eso `pro_agregar_articulo` exige estado `pe`: el aprobador autorizó
+un conjunto concreto y colar uno más después saltaría esa autorización.
+
+🔒 **Las firmas no tienen orden y no mueven el estado.** Cualquiera de las dos
+puede llegar primero; el trámite se queda en `ap` hasta que se recibe.
+
+## Alta en dos procedimientos
+
+`pro_crear_solicitud` abre el trámite con el **primer** artículo (documento,
+primera línea y las dos firmas vacías) y `pro_agregar_articulo` añade el resto.
+
+No es una llamada con lista porque `REQUSUMI.RESUCEIN` sale del activo y el
+documento no se puede crear antes de conocer al menos uno. Como la cabecera se
+copia en cada línea, esto se resuelve con parámetros escalares, sin tipos
+colección ni tocar `ProcedureExecutor`. Las N llamadas van en el mismo
+`@Transactional` del service.
+
+Todos los artículos de un trámite deben compartir **centro de información**
+(`ACFICEIN`) y **tercero** (`ACFITERC`): son datos de cabecera del documento y con
+valores distintos no hay uno correcto que poner. Se rechaza al agregar.
+
+## Firmas
+
+- **Se guardan como `BLOB`** (bytes), no base64 en `CLOB`: ocupa ~33 % menos, se
+  abre con *View as image* desde SQL Developer y evita el `ORA-01460` al pasar un
+  String largo a un parámetro `CLOB`.
+- **El base64 es formato de transporte**, no de almacenamiento. `FirmaUtil` quita
+  el prefijo `data:image/...;base64,`, tolera saltos de línea, valida los magic
+  bytes PNG/JPEG y aplica `app.traspasos.firma.max-bytes`.
+- **`ProcedureExecutor` enlaza `byte[]` como `java.sql.Blob`**, no como
+  `byte[]` directo: registrado como `VARBINARY` el driver lo manda como `RAW`, que
+  en PL/SQL topa en 32 KB igual que el `CLOB`. El caso está en
+  `configurarParametros`.
+- Las dos filas de `FI_MOTRFIRM` se crean **vacías al abrir el trámite**, así
+  `pro_registrar_firma` es un `UPDATE` y la PK impide una segunda firma.
+
+## Contrato de la API
+
+Ninguna ruta cambió de forma; `{id}` es el número de trámite.
+
+| Endpoint | Devuelve |
+|---|---|
+| `POST /crear` | Body con `articulos[]` (`articulo`, `placa`). Responde `id` = número de trámite |
+| `GET /list` | Mínimo: `id`, `tipoDocumento`, `numeroDocumento`, `fechaCreacion` |
+| `GET get/{id}` | Cabecera + `articulos[]` + `firmas[]` (posición, tipo, fechaFirma, firmada, firma en base64) |
+| `POST process/{id}` | Aprueba o rechaza el trámite completo |
+| `PUT sign/{id}` | `tipoFirma` (`FU`/`DE`) + `firma` en base64 |
+| `GET sign/{id}/{tipo}` | La imagen, con su `Content-Type`. Para soporte y navegador |
+| `PUT /{id}/recibir` | Exige las dos firmas y genera el inventario |
+
+**La bandeja y el detalle no duplican datos.** Lo que está en el detalle no se
+repite en la lista, y dentro del detalle cada dato vive en un solo sitio: las
+firmas están completas en `firmas[]`, no repartidas entre el array y campos
+sueltos de la cabecera.
+
+## Operación
+
+Orden de los scripts en `src/main/resources/db/`: `01` tabla → `02` firmas →
+`03` spec → `04` body → `05` sinónimos → `06` parámetros. Se aplican como
+`SRFPNACUA`.
+
+⚠️ **Los archivos de paquete necesitan un `/` solo en su última línea.** Sin él
+*sqlplus* no ejecuta el `CREATE OR REPLACE` y **no avisa de nada**: parece que
+compiló y en realidad no hizo nada. Verificar siempre después:
+
+```sql
+SELECT object_type, status FROM user_objects WHERE object_name = 'PKG_FI_MOVITRAS';
+```
+
+**Pendiente de confirmar con el área funcional:** `06_PARAOPER.sql` da de alta
+`ESAPTRAS` ("estado al aprobar traspaso") pero el paquete lee `ESTAAPRO`, que ese
+script no crea. Una de las dos sobra. Está marcado en un comentario del body.

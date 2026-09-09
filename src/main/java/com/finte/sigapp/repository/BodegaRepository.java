@@ -11,18 +11,18 @@ import java.util.List;
 
 @Repository
 @RequiredArgsConstructor
-public class BodegaRepository  {
+public class BodegaRepository {
   // todo: Se debe pasar a JPA Repository.
   private final NamedParameterJdbcTemplate namedJdbcTemplate;
 
   public List<BodegaModel> buscarPorDivision(String codigoDivision) {
     String sql = """
-            SELECT BODECODI, BODENOMB, BODEDIVI, BODEESTA
+            SELECT BODECODI, BODEDESC, BODEDIVI, BODEESTA
               FROM BODEGA
              WHERE BODEESTA = 'ac'
                AND BODEDIVI = :divi
                AND BODETIBO = 'PE'
-             ORDER BY BODENOMB ASC
+             ORDER BY BODEDESC ASC
         """;
 
     MapSqlParameterSource params = new MapSqlParameterSource()

@@ -26,11 +26,11 @@ public class AcfigeolController {
     private final AcfigeolService acfigeolService;
     private final JwtTokenProvider tokenProvider;
 
-    @PostMapping
+    @PostMapping("/crear")
     @Operation(summary = "Crear ubicación geográfica", description = "Crea el registro de ubicación geográfica para un activo fijo existente", security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponse(responseCode = "200", description = "Ubicación geográfica creada exitosamente")
     public ResponseEntity<AcfigeolActionResponse> crear(
-            @RequestHeader("Authorization") String bearerToken,
+            @Parameter(hidden = true) @RequestHeader("Authorization") String bearerToken,
             @RequestBody AcfigeolRequest request) {
         String token = tokenProvider.extraerToken(bearerToken);
         tokenProvider.extraerIdUsuario(token); // Validación del token
@@ -39,21 +39,20 @@ public class AcfigeolController {
         return ResponseEntity.ok(response);
     }
 
-    @PutMapping("/{id}")
+    @PutMapping("/actualizar")
     @Operation(summary = "Actualizar ubicación geográfica", description = "Actualiza la latitud y longitud de una ubicación geográfica existente", security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponse(responseCode = "200", description = "Ubicación geográfica actualizada exitosamente")
     public ResponseEntity<AcfigeolActionResponse> actualizar(
-            @RequestHeader("Authorization") String bearerToken,
-            @PathVariable Long id,
+            @Parameter(hidden = true) @RequestHeader("Authorization") String bearerToken,
             @RequestBody AcfigeolRequest request) {
         String token = tokenProvider.extraerToken(bearerToken);
         tokenProvider.extraerIdUsuario(token); // Validación del token
 
-        AcfigeolActionResponse response = acfigeolService.actualizar(id, request);
+        AcfigeolActionResponse response = acfigeolService.actualizar(request);
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/buscar/{id}")
     @Operation(summary = "Obtener ubicación geográfica", description = "Retorna la ubicación geográfica de un activo fijo específico", security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponse(responseCode = "200", description = "Ubicación geográfica encontrada")
     public ResponseEntity<AcfigeolResponse> buscarPorId(
@@ -66,7 +65,7 @@ public class AcfigeolController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping
+    @GetMapping("/listar")
     @Operation(summary = "Obtener todas las ubicaciones", description = "Retorna una lista con todas las ubicaciones geográficas registradas", security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponse(responseCode = "200", description = "Lista de ubicaciones geográficas obtenida")
     @ApiResponse(responseCode = "204", description = "No se encontraron ubicaciones")
@@ -82,11 +81,11 @@ public class AcfigeolController {
         return ResponseEntity.ok(responseList);
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/eliminar/{id}")
     @Operation(summary = "Eliminar ubicación geográfica", description = "Elimina el registro de ubicación geográfica de un activo fijo", security = @SecurityRequirement(name = "bearerAuth"))
     @ApiResponse(responseCode = "200", description = "Ubicación geográfica eliminada exitosamente")
     public ResponseEntity<AcfigeolActionResponse> eliminar(
-            @RequestHeader("Authorization") String bearerToken,
+            @Parameter(hidden = true) @RequestHeader("Authorization") String bearerToken,
             @PathVariable Long id) {
         String token = tokenProvider.extraerToken(bearerToken);
         tokenProvider.extraerIdUsuario(token); // Validación del token

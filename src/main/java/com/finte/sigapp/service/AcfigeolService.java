@@ -9,7 +9,7 @@ import java.util.List;
 
 public interface AcfigeolService {
     AcfigeolActionResponse crear(AcfigeolRequest request);
-    AcfigeolActionResponse actualizar(Long id, AcfigeolRequest request);
+    AcfigeolActionResponse actualizar(AcfigeolRequest request);
     AcfigeolResponse buscarPorId(Long id);
     List<AcfigeolResponse> buscarTodos();
     AcfigeolActionResponse eliminar(Long id);

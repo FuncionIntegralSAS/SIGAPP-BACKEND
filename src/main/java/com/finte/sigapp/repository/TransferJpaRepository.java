@@ -14,64 +14,37 @@ public interface TransferJpaRepository extends JpaRepository<MovitrasTraspasoMod
   /**
    * Bandeja de traspasos por estado, con filtros opcionales de empresa y bodega.
    *
-   * Las descripciones de elemento, persona y bodega se resuelven con subconsultas
-   * escalares (MAX garantiza una sola fila) para no multiplicar filas del tramite
-   * ni depender de joins externos.
+   * Devuelve UNA FILA POR TRAMITE, no por articulo: FI_MOVITRAS tiene N lineas y
+   * aqui se agrupan por MOTRNUTR. El tipo, el numero de documento y la fecha se
+   * toman con MIN porque son identicos en las N filas del tramite.
    *
-   * A diferencia de FI_SIGATRAS, FI_MOVITRAS si permite filtrar por bodega: se
-   * resuelve contra la bodega del activo (ACTIFIJO.ACFIBODE) mediante EXISTS.
-   * Ambos filtros aceptan null, en cuyo caso no se aplican.
+   * Es deliberadamente minima: la bandeja lista y enlaza, y el detalle lo sirve
+   * {@link MovitrasRepository#findByMotrnutrOrderByMotridmt}. Por eso no resuelve
+   * nombres de personas, ni cuenta articulos, ni consulta las firmas. No queda
+   * ninguna subconsulta en la proyeccion.
+   *
+   * El unico acceso a otra tabla es el filtro de bodega, que usa EXISTS sobre el
+   * tramite completo: si CUALQUIERA de sus articulos esta en esa bodega, el
+   * tramite aparece. Es un filtro, no una proyeccion.
    */
   @Query(value = """
-      SELECT T.MOTRIDMT,
-             T.MOTRDREM,
-             T.MOTRDRTD,
-             T.MOTRDRND,
-             T.MOTRPEFU,
-             T.MOTRPEDE,
-             T.MOTRARTI,
-             T.MOTRPLAC,
-             T.MOTRESTA,
-             T.MOTROBSE,
-             T.MOTRMORE,
-             T.MOTRFECR,
-             T.MOTRUSCR,
-             T.MOTRFEAP,
-             T.MOTRUSAP,
-             T.MOTRFAFU,
-             T.MOTRFADE,
-             T.MOTRFERE,
-             (SELECT MAX(A.ACFIOBSE)
-                FROM ACTIFIJO A
-               WHERE A.ACFIARTI = T.MOTRARTI
-                 AND A.ACFIPLAC = T.MOTRPLAC) AS NOMBELEM,
-             (SELECT MAX(P.PERSCODI || ' - ' || P.PERSNOMB || ' ' || P.PERSAPEL)
-                FROM PERSONAL P
-               WHERE P.PERSCODI = T.MOTRPEFU) AS PERSFUEN,
-             (SELECT MAX(B.BODECODI || ' - ' || B.BODEDESC)
-                FROM ACTIFIJO A
-                JOIN BODEGA B ON B.BODECODI = A.ACFIBODE
-                             AND B.BODEEMPR = T.MOTRDREM
-               WHERE A.ACFIARTI = T.MOTRARTI
-                 AND A.ACFIPLAC = T.MOTRPLAC) AS BODEFUEN,
-             (SELECT MAX(P.PERSCODI || ' - ' || P.PERSNOMB || ' ' || P.PERSAPEL)
-                FROM PERSONAL P
-               WHERE P.PERSCODI = T.MOTRPEDE) AS PERSDEST,
-             (SELECT MAX(B.BODECODI || ' - ' || B.BODEDESC)
-                FROM PERSONAL P
-                JOIN BODEGA B ON B.BODEDIVI = P.PERSDIVI
-                             AND B.BODETIBO = 'PE'
-               WHERE P.PERSCODI = T.MOTRPEDE) AS BODEDEST
+      SELECT T.MOTRNUTR,
+             MIN(T.MOTRDRTD) AS MOTRDRTD,
+             MIN(T.MOTRDRND) AS MOTRDRND,
+             MIN(T.MOTRFECR) AS MOTRFECR
         FROM FI_MOVITRAS T
        WHERE T.MOTRESTA IN (:estados)
          AND (:empresa IS NULL OR T.MOTRDREM = :empresa)
          AND (:bodega IS NULL
               OR EXISTS (SELECT 1
-                           FROM ACTIFIJO A
-                          WHERE A.ACFIARTI = T.MOTRARTI
-                            AND A.ACFIPLAC = T.MOTRPLAC
-                            AND A.ACFIBODE = :bodega))
-       ORDER BY T.MOTRFECR DESC
+                           FROM FI_MOVITRAS T2
+                           JOIN ACTIFIJO A2
+                             ON A2.ACFIARTI = T2.MOTRARTI
+                            AND NVL(A2.ACFIPLAC,'.') = T2.MOTRPLAC
+                          WHERE T2.MOTRNUTR = T.MOTRNUTR
+                            AND A2.ACFIBODE = :bodega))
+       GROUP BY T.MOTRNUTR
+       ORDER BY MIN(T.MOTRFECR) DESC
       """, nativeQuery = true)
   List<MovitrasTraspasoModel> buscarPorEstados(@Param("estados") List<String> estados,
       @Param("empresa") String empresa,

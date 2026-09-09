@@ -40,9 +40,12 @@ public class AcfigeolServiceImpl implements AcfigeolService {
     }
 
     @Override
-    public AcfigeolActionResponse actualizar(Long id, AcfigeolRequest request) {
-        AcfigeolEntity entity = repository.findById(id)
-                .orElseThrow(() -> new BussinessException(ErrorCode.SIGAPP_404, "No se encontró la ubicación geográfica para el activo con ID: " + id));
+    public AcfigeolActionResponse actualizar(AcfigeolRequest request) {
+        if (request.getAfgeIdre() == null) {
+            throw new BussinessException(ErrorCode.SIGAPP_400, "El ID del activo (afgeIdre) es obligatorio para actualizar.");
+        }
+        AcfigeolEntity entity = repository.findById(request.getAfgeIdre())
+                .orElseThrow(() -> new BussinessException(ErrorCode.SIGAPP_404, "No se encontró la ubicación geográfica para el activo con ID: " + request.getAfgeIdre()));
 
         entity.setAfgeLati(request.getAfgeLati());
         entity.setAfgeLong(request.getAfgeLong());

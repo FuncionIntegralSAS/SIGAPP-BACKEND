@@ -30,11 +30,11 @@ public interface TransferService {
 
     ObjectListResponse listarSolicitudes(String empresa, String bodega, String estadoFront);
 
-    ObjectResponse obtenerDetalle(Long idTramite);
+    ObjectResponse obtenerDetalle(Long numeroTramite);
 
-    ObjectResponse procesarTraspaso(Long idTramite, TransferProcessRequest request, String bearerToken);
+    ObjectResponse procesarTraspaso(Long numeroTramite, TransferProcessRequest request, String bearerToken);
 
-    ObjectResponse registrarFirma(Long idTramite, TransferSignRequest request, String bearerToken);
+    ObjectResponse registrarFirma(Long numeroTramite, TransferSignRequest request, String bearerToken);
 
     /**
      * Bytes de la imagen de una firma, para servirla tal cual desde el endpoint de
@@ -44,7 +44,7 @@ public interface TransferService {
      * @param tipoFirma "FU" fuente o "DE" destino
      * @return los bytes, o null si el traspaso no existe o esa parte no ha firmado
      */
-    byte[] obtenerFirma(Long idTramite, String tipoFirma);
+    byte[] obtenerFirma(Long numeroTramite, String tipoFirma);
 
-    ObjectResponse recibir(Long idTramite, String bearerToken);
+    ObjectResponse recibir(Long numeroTramite, String bearerToken);
 }
