@@ -17,9 +17,11 @@ import com.finte.sigapp.entity.MotrfirmEntity;
 import com.finte.sigapp.entity.MovitrasEntity;
 import com.finte.sigapp.exception.BussinessException;
 import com.finte.sigapp.exception.catalog.ErrorCode;
+import com.finte.sigapp.model.ActivoCompatibilidadModel;
 import com.finte.sigapp.model.ActivoPersonaModel;
 import com.finte.sigapp.model.MovitrasTraspasoModel;
 import com.finte.sigapp.model.PersonalModel;
+import com.finte.sigapp.repository.ActivoCompatibilidadRepository;
 import com.finte.sigapp.repository.ActivoPersonaRepository;
 import com.finte.sigapp.repository.MotrfirmRepository;
 import com.finte.sigapp.repository.MovitrasRepository;
@@ -41,6 +43,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -73,6 +76,7 @@ public class TransferServiceImpl implements TransferService {
     private final MovitrasRepository movitrasRepository;
     private final MotrfirmRepository motrfirmRepository;
     private final ActivoPersonaRepository activoPersonaRepository;
+    private final ActivoCompatibilidadRepository activoCompatibilidadRepository;
     private final PersonalRepository personalRepository;
     private final JwtTokenProvider tokenProvider;
     private final FirmaUtil firmaUtil;
@@ -83,6 +87,7 @@ public class TransferServiceImpl implements TransferService {
                                MovitrasRepository movitrasRepository,
                                MotrfirmRepository motrfirmRepository,
                                ActivoPersonaRepository activoPersonaRepository,
+                               ActivoCompatibilidadRepository activoCompatibilidadRepository,
                                PersonalRepository personalRepository,
                                JwtTokenProvider tokenProvider,
                                FirmaUtil firmaUtil,
@@ -92,6 +97,7 @@ public class TransferServiceImpl implements TransferService {
         this.movitrasRepository = movitrasRepository;
         this.motrfirmRepository = motrfirmRepository;
         this.activoPersonaRepository = activoPersonaRepository;
+        this.activoCompatibilidadRepository = activoCompatibilidadRepository;
         this.personalRepository = personalRepository;
         this.tokenProvider = tokenProvider;
         this.firmaUtil = firmaUtil;
@@ -136,6 +142,11 @@ public class TransferServiceImpl implements TransferService {
                     "No se puede crear el traspaso. Ya estan en un traspaso abierto: " + comprometidos);
         }
 
+        String incompatibles = buscarIncompatibles(request.getEmpresa(), articulos);
+        if (incompatibles != null) {
+            return new ObjectResponse(CODE_ERROR, incompatibles);
+        }
+
         TransferItemRequest primero = articulos.get(0);
 
         TransferCreatedResponse creado = repository.crearSolicitud(
@@ -153,8 +164,10 @@ public class TransferServiceImpl implements TransferService {
                     "El traspaso se proceso pero el procedimiento no retorno el numero de tramite");
         }
 
-        // El resto de articulos cuelga del tramite recien creado. El paquete valida
-        // aqui que compartan centro de informacion y tercero con el primero.
+        // El resto de articulos cuelga del tramite recien creado. El paquete
+        // revalida que compartan centro de informacion con el primero; a estas
+        // alturas ya deberia pasar, porque buscarIncompatibles lo comprobo antes
+        // de abrir el documento.
         for (TransferItemRequest articulo : articulos.subList(1, articulos.size())) {
             repository.agregarArticulo(
                     creado.getId(),
@@ -413,6 +426,82 @@ public class TransferServiceImpl implements TransferService {
         }
 
         return conflictos.isEmpty() ? null : String.join("; ", conflictos);
+    }
+
+    /**
+     * Comprueba que todos los elementos compartan centro de informacion, que es
+     * dato de CABECERA: ACFICEIN acaba en REQUSUMI.RESUCEIN, una sola columna
+     * para todo el documento. Con valores distintos no hay uno correcto que
+     * poner, y tomar el del primero mandaria el documento a un centro equivocado
+     * sin que nadie se entere.
+     *
+     * NO se valida el tercero. ACFITERC es "el tercero al que se compra" -el
+     * proveedor- y no guarda relacion con un cambio de responsable interno: dos
+     * elementos comprados a proveedores distintos pueden ir en el mismo
+     * documento sin problema. El documento lleva el NIT de la propia empresa.
+     *
+     * POR QUE SE VALIDA AQUI SI EL PAQUETE YA LO HACE
+     *
+     * El paquete corta en el primer articulo que no encaja, y lo hace DESPUES de
+     * haber creado el documento con el primero. La transaccion revierte, pero el
+     * usuario recibe un ORA-20008 con codigos crudos en vez de algo que pueda
+     * entender. Comprobarlo antes deja este rechazo a la altura del que ya
+     * existia para los activos comprometidos: se listan todos los implicados de
+     * una vez.
+     *
+     * Un articulo que no aparezca en ACTIFIJO no se valida aqui: de ese se
+     * encarga el paquete, que es quien sabe decir que no existe.
+     *
+     * @return el mensaje de rechazo, o null si todos son compatibles
+     */
+    private String buscarIncompatibles(String empresa, List<TransferItemRequest> articulos) {
+
+        List<String> codigos = articulos.stream()
+                .map(TransferItemRequest::getArticulo)
+                .distinct()
+                .toList();
+
+        List<ActivoCompatibilidadModel> datos =
+                activoCompatibilidadRepository.buscarDatosDeCabecera(codigos, empresa);
+
+        if (datos.isEmpty()) {
+            return null;
+        }
+
+        // El filtro fue por codigo de articulo; aqui se cruza el par exacto,
+        // porque el mismo articulo con otra placa es otro elemento fisico.
+        Map<String, ActivoCompatibilidadModel> porElemento = new HashMap<>();
+        for (ActivoCompatibilidadModel dato : datos) {
+            porElemento.putIfAbsent(dato.getAcfiarti() + "|" + dato.getAcfiplac(), dato);
+        }
+
+        Map<String, List<String>> porCentro = new LinkedHashMap<>();
+        for (TransferItemRequest articulo : articulos) {
+            ActivoCompatibilidadModel dato = porElemento.get(articulo.clave());
+
+            if (dato != null) {
+                String centro = StringUtils.hasText(dato.getAcficein()) ? dato.getAcficein() : "sin centro";
+
+                porCentro.computeIfAbsent(centro, k -> new ArrayList<>())
+                        .add(dato.getAcfiobse() + " (" + dato.getAcfiarti()
+                                + ", placa " + dato.getAcfiplac() + ")");
+            }
+        }
+
+        if (porCentro.size() <= 1) {
+            return null;
+        }
+
+        // Se agrupa por centro en vez de enumerar elemento por elemento: lo que
+        // hace falta ver es que hay grupos incompatibles y cual es cual, no una
+        // lista plana que haya que comparar a mano.
+        List<String> grupos = new ArrayList<>();
+        for (Map.Entry<String, List<String>> grupo : porCentro.entrySet()) {
+            grupos.add(String.join(", ", grupo.getValue()) + ": centro " + grupo.getKey());
+        }
+
+        return "No se puede crear el traspaso porque los elementos no pertenecen al mismo "
+                + "centro de informacion. " + String.join(" | ", grupos);
     }
 
     /** Los elementos sin placa la guardan como punto, igual que ACTIFIJO. */

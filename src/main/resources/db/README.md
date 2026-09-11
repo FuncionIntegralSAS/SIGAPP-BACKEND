@@ -246,6 +246,15 @@ siguen la convención del ERP (`DR` = Documento Requisición, igual que
 
 ## Movimiento de inventario al recibir
 
+> **Cambio 2026-09-11 — el tercero del documento.** `DOINTERC` y `MOINTERC` se llenaban con
+> `ACTIFIJO.ACFITERC`, que es el **proveedor** al que se compró el activo. Ahora llevan
+> `EMPRESA.EMPRNIT`, que es lo que el ERP pone en sus propios documentos de salida y
+> traslado. Con ello desapareció la validación que exigía que todos los artículos
+> compartieran tercero: bloqueaba traspasos legítimos entre activos de distinto proveedor.
+> Hay que **recompilar `04_PKG_FI_MOVITRAS.pkb`** en los ambientes donde ya estuviera
+> aplicado.
+
+
 **Regla de oro del módulo: el documento de inventario se genera al RECIBIR, nunca
 al aprobar.** Aprobar autoriza el trámite; recibir es lo que mueve el activo, y
 solo se puede recibir con las dos firmas registradas. Un traspaso aprobado que

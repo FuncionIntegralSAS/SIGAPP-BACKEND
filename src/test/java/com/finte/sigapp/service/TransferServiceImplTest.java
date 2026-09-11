@@ -16,9 +16,11 @@ import com.finte.sigapp.dto.response.TransferSignatureResponse;
 import com.finte.sigapp.entity.MotrfirmEntity;
 import com.finte.sigapp.entity.MovitrasEntity;
 import com.finte.sigapp.exception.BussinessException;
+import com.finte.sigapp.model.ActivoCompatibilidadModel;
 import com.finte.sigapp.model.ActivoPersonaModel;
 import com.finte.sigapp.model.MovitrasTraspasoModel;
 import com.finte.sigapp.model.PersonalModel;
+import com.finte.sigapp.repository.ActivoCompatibilidadRepository;
 import com.finte.sigapp.repository.ActivoPersonaRepository;
 import com.finte.sigapp.repository.MotrfirmRepository;
 import com.finte.sigapp.repository.MovitrasRepository;
@@ -78,6 +80,9 @@ class TransferServiceImplTest {
     private ActivoPersonaRepository activoPersonaRepository;
 
     @Mock
+    private ActivoCompatibilidadRepository activoCompatibilidadRepository;
+
+    @Mock
     private PersonalRepository personalRepository;
 
     @Mock
@@ -97,6 +102,7 @@ class TransferServiceImplTest {
                 movitrasRepository,
                 motrfirmRepository,
                 activoPersonaRepository,
+                activoCompatibilidadRepository,
                 personalRepository,
                 tokenProvider,
                 new FirmaUtil(MAX_BYTES_FIRMA),
@@ -185,6 +191,86 @@ class TransferServiceImplTest {
         // Placa nula normalizada a punto, igual que ACTIFIJO.
         verify(repository).agregarArticulo(TRAMITE, "ART-0090", ".", USUARIO);
         verify(repository, times(2)).agregarArticulo(anyLong(), any(), any(), any());
+    }
+
+    /** Activo con el dato que obliga a que el traspaso sea homogeneo. */
+    private ActivoCompatibilidadModel activoCon(String codigo, String placa, String centroInformacion) {
+        return ActivoCompatibilidadModel.builder()
+                .acfiarti(codigo)
+                .acfiplac(placa)
+                .acfiobse("Elemento " + codigo)
+                .acficein(centroInformacion)
+                .build();
+    }
+
+    /**
+     * Lo que se comprueba no es solo que rechace, sino que lo haga ANTES de
+     * crear nada: si el documento llegara a abrirse, el paquete cortaria en el
+     * segundo articulo con un ORA-20008 lleno de codigos crudos.
+     */
+    @Test
+    @DisplayName("crearSolicitud rechaza mezclar centros de informacion antes de abrir el documento")
+    void crearSolicitud_RechazaMezclaDeCentrosDeInformacion() {
+        stubUsuarioDelToken();
+        stubSinComprometidos();
+
+        when(activoCompatibilidadRepository.buscarDatosDeCabecera(anyCollection(), eq("001")))
+                .thenReturn(List.of(
+                        activoCon("ART-0012", "PL-771", "01"),
+                        activoCon("ART-0034", "PL-802", "02")));
+
+        ObjectResponse res = service.crearSolicitud(
+                requestValido(articulo("ART-0012", "PL-771"), articulo("ART-0034", "PL-802")), BEARER);
+
+        assertEquals(CODE_ERROR, res.getCode());
+        assertTrue(res.getMsg().contains("centro de informacion"), res.getMsg());
+
+        verify(repository, never()).crearSolicitud(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(repository, never()).agregarArticulo(anyLong(), any(), any(), any());
+    }
+
+    /**
+     * El caso que reporto el error en produccion: dos activos comprados a
+     * proveedores distintos. ACFITERC es el proveedor, no el responsable, asi
+     * que no tiene nada que ver con un cambio de responsable interno y el
+     * traspaso debe pasar.
+     */
+    @Test
+    @DisplayName("crearSolicitud acepta elementos de distinto proveedor si comparten centro")
+    void crearSolicitud_AceptaElementosCompatibles() {
+        stubUsuarioDelToken();
+        stubCreacionOk();
+
+        when(activoCompatibilidadRepository.buscarDatosDeCabecera(anyCollection(), eq("001")))
+                .thenReturn(List.of(
+                        activoCon("ART-0012", "PL-771", "01"),
+                        activoCon("ART-0034", "PL-802", "01")));
+
+        ObjectResponse res = service.crearSolicitud(
+                requestValido(articulo("ART-0012", "PL-771"), articulo("ART-0034", "PL-802")), BEARER);
+
+        assertEquals(CODE_OK, res.getCode());
+        verify(repository).agregarArticulo(TRAMITE, "ART-0034", "PL-802", USUARIO);
+    }
+
+    /**
+     * Un elemento que no esta en ACTIFIJO no se puede clasificar aqui. No se
+     * inventa un rechazo: de ese caso se encarga el paquete, que es quien sabe
+     * decir que el activo no existe.
+     */
+    @Test
+    @DisplayName("crearSolicitud no rechaza cuando el activo no aparece en ACTIFIJO")
+    void crearSolicitud_SinDatosDeActivoNoRechaza() {
+        stubUsuarioDelToken();
+        stubCreacionOk();
+
+        when(activoCompatibilidadRepository.buscarDatosDeCabecera(anyCollection(), eq("001")))
+                .thenReturn(List.of());
+
+        ObjectResponse res = service.crearSolicitud(
+                requestValido(articulo("ART-0012", "PL-771"), articulo("ART-0034", "PL-802")), BEARER);
+
+        assertEquals(CODE_OK, res.getCode());
     }
 
     @Test
