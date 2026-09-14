@@ -457,6 +457,13 @@ rastro en `DOCUINVE` ni en `MOVIINVE`.
 artículo. Por eso `pro_agregar_articulo` exige estado `pe`: el aprobador autorizó
 un conjunto concreto y colar uno más después saltaría esa autorización.
 
+🔒 **Un activo no puede estar en dos traspasos abiertos a la vez.** Lo cierran
+`na` y `re`; en `pe` o `ap` sigue comprometido. Lo garantizan dos cosas: el
+índice único parcial `FI_MOVITRAS_UK_ABIERTO` (a nivel de tabla, cubre la carrera
+entre dos sesiones) y `pro_valida_activo_libre` (mensaje legible en vez de
+`ORA-00001`). `GET /traspasos/activos` lo expone como `enTramite` para que el
+front lo bloquee antes.
+
 🔒 **Las firmas no tienen orden y no mueven el estado.** Cualquiera de las dos
 puede llegar primero; el trámite se queda en `ap` hasta que se recibe.
 

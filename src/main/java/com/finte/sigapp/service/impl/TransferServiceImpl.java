@@ -6,18 +6,24 @@ import com.finte.sigapp.dto.request.TransferRequest;
 import com.finte.sigapp.dto.request.TransferSignRequest;
 import com.finte.sigapp.dto.response.ObjectListResponse;
 import com.finte.sigapp.dto.response.ObjectResponse;
+import com.finte.sigapp.dto.response.TransferAssetResponse;
 import com.finte.sigapp.dto.response.TransferCreatedResponse;
 import com.finte.sigapp.dto.response.TransferDetailResponse;
 import com.finte.sigapp.dto.response.TransferItemResponse;
+import com.finte.sigapp.dto.response.TransferPersonResponse;
 import com.finte.sigapp.dto.response.TransferResponse;
 import com.finte.sigapp.dto.response.TransferSignatureResponse;
 import com.finte.sigapp.entity.MotrfirmEntity;
 import com.finte.sigapp.entity.MovitrasEntity;
 import com.finte.sigapp.exception.BussinessException;
 import com.finte.sigapp.exception.catalog.ErrorCode;
+import com.finte.sigapp.model.ActivoPersonaModel;
 import com.finte.sigapp.model.MovitrasTraspasoModel;
+import com.finte.sigapp.model.PersonalModel;
+import com.finte.sigapp.repository.ActivoPersonaRepository;
 import com.finte.sigapp.repository.MotrfirmRepository;
 import com.finte.sigapp.repository.MovitrasRepository;
+import com.finte.sigapp.repository.PersonalRepository;
 import com.finte.sigapp.repository.TransferJpaRepository;
 import com.finte.sigapp.repository.TransferRepository;
 import com.finte.sigapp.security.JwtTokenProvider;
@@ -33,8 +39,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -46,6 +54,7 @@ public class TransferServiceImpl implements TransferService {
     private static final int CODE_ERROR = -1;
 
     private static final String ESTADO_PROCESADOS = "pr";
+    private static final String ESTADO_PENDIENTE = "pe";
     private static final String ESTADO_APROBADO = "ap";
     private static final String ESTADO_RECHAZADO = "na";
     private static final String ESTADO_RECIBIDO = "re";
@@ -53,10 +62,18 @@ public class TransferServiceImpl implements TransferService {
     /** Placa de los elementos que no tienen, igual que ACTIFIJO. */
     private static final String PLACA_VACIA = ".";
 
+    /**
+     * Estados que dejan un traspaso ABIERTO y por tanto mantienen comprometidos
+     * sus articulos. Los finales, 'na' y 're', los liberan.
+     */
+    private static final List<String> ESTADOS_ABIERTOS = List.of(ESTADO_PENDIENTE, ESTADO_APROBADO);
+
     private final TransferRepository repository;
     private final TransferJpaRepository transferJpaRepository;
     private final MovitrasRepository movitrasRepository;
     private final MotrfirmRepository motrfirmRepository;
+    private final ActivoPersonaRepository activoPersonaRepository;
+    private final PersonalRepository personalRepository;
     private final JwtTokenProvider tokenProvider;
     private final FirmaUtil firmaUtil;
     private final int maxArticulos;
@@ -65,6 +82,8 @@ public class TransferServiceImpl implements TransferService {
                                TransferJpaRepository transferJpaRepository,
                                MovitrasRepository movitrasRepository,
                                MotrfirmRepository motrfirmRepository,
+                               ActivoPersonaRepository activoPersonaRepository,
+                               PersonalRepository personalRepository,
                                JwtTokenProvider tokenProvider,
                                FirmaUtil firmaUtil,
                                @Value("${app.traspasos.max-articulos:50}") int maxArticulos) {
@@ -72,6 +91,8 @@ public class TransferServiceImpl implements TransferService {
         this.transferJpaRepository = transferJpaRepository;
         this.movitrasRepository = movitrasRepository;
         this.motrfirmRepository = motrfirmRepository;
+        this.activoPersonaRepository = activoPersonaRepository;
+        this.personalRepository = personalRepository;
         this.tokenProvider = tokenProvider;
         this.firmaUtil = firmaUtil;
         this.maxArticulos = maxArticulos;
@@ -107,6 +128,12 @@ public class TransferServiceImpl implements TransferService {
         if (repetido != null) {
             return new ObjectResponse(CODE_ERROR,
                     "El articulo " + repetido + " esta repetido en la solicitud");
+        }
+
+        String comprometidos = buscarComprometidos(articulos);
+        if (comprometidos != null) {
+            return new ObjectResponse(CODE_ERROR,
+                    "No se puede crear el traspaso. Ya estan en un traspaso abierto: " + comprometidos);
         }
 
         TransferItemRequest primero = articulos.get(0);
@@ -256,6 +283,52 @@ public class TransferServiceImpl implements TransferService {
                 });
     }
 
+    @Override
+    public ObjectListResponse listarActivosDePersona(String persona, String empresa) {
+
+        log.info("Listando activos de la persona {} - empresa {}", persona, empresa);
+
+        List<Object> activos = new ArrayList<>(
+                activoPersonaRepository.buscarPorResponsable(persona, empresa).stream()
+                        .map(this::mapToAsset)
+                        .toList());
+
+        return new ObjectListResponse(CODE_OK, "Consulta exitosa", activos);
+    }
+
+    @Override
+    public ObjectListResponse listarPersonasDeBodega(String bodega, String empresa) {
+
+        log.info("Listando personas de la bodega {} - empresa {}", bodega, empresa);
+
+        List<Object> personas = new ArrayList<>(
+                personalRepository.buscarPorBodega(bodega, empresa).stream()
+                        .map(this::mapToPerson)
+                        .toList());
+
+        return new ObjectListResponse(CODE_OK, "Consulta exitosa", personas);
+    }
+
+    private TransferAssetResponse mapToAsset(ActivoPersonaModel model) {
+        return TransferAssetResponse.builder()
+                .articulo(model.getAcfiarti())
+                .placa(model.getAcfiplac())
+                .nombre(model.getAcfiobse())
+                .centroInformacion(model.getAcficein())
+                .tercero(model.getAcfiterc())
+                // La consulta devuelve 1 o 0: Oracle no tiene booleano en SQL.
+                .enTramite(model.getEnTramite() != null && model.getEnTramite() == 1)
+                .build();
+    }
+
+    private TransferPersonResponse mapToPerson(PersonalModel model) {
+        return TransferPersonResponse.builder()
+                .cedula(model.getPerscodi())
+                .nombre(model.getPersnomb())
+                .apellido(model.getPersapel())
+                .build();
+    }
+
     /**
      * Traduce el tipo de firma que usan los endpoints a la posicion de
      * FI_MOTRFIRM.
@@ -289,6 +362,57 @@ public class TransferServiceImpl implements TransferService {
             }
         }
         return null;
+    }
+
+    /**
+     * Elementos de la solicitud que ya estan dentro de un traspaso sin cerrar,
+     * descritos con su placa y el numero de tramite que los tiene.
+     *
+     * Se comprueba aqui y no solo en el paquete por dos razones. La primera es que
+     * asi no se abre nada: ni documento ni lineas, y el error llega antes de tocar
+     * el ERP. La segunda es que el paquete corta en el primer conflicto, asi que
+     * con cuatro articulos comprometidos el funcionario tendria que descubrirlos
+     * de uno en uno; aqui salen todos en el mismo mensaje.
+     *
+     * El paquete conserva su propia validacion como respaldo, y el indice unico
+     * FI_MOVITRAS_UK_ABIERTO cubre la carrera entre dos sesiones creando a la vez,
+     * que es la unica ventana que esta comprobacion no puede cerrar.
+     *
+     * @return descripcion de los conflictos, o null si todos estan libres
+     */
+    private String buscarComprometidos(List<TransferItemRequest> articulos) {
+
+        List<String> codigos = articulos.stream()
+                .map(TransferItemRequest::getArticulo)
+                .distinct()
+                .toList();
+
+        List<MovitrasEntity> abiertos =
+                movitrasRepository.findByMotrestaInAndMotrartiIn(ESTADOS_ABIERTOS, codigos);
+
+        if (abiertos.isEmpty()) {
+            return null;
+        }
+
+        // El filtro fue por codigo de articulo; aqui se cruza el par exacto,
+        // porque el mismo articulo con otra placa es otro elemento fisico.
+        Map<String, Long> tramitePorElemento = new HashMap<>();
+        for (MovitrasEntity linea : abiertos) {
+            tramitePorElemento.putIfAbsent(linea.getMotrarti() + "|" + linea.getMotrplac(),
+                    linea.getMotrnutr());
+        }
+
+        List<String> conflictos = new ArrayList<>();
+        for (TransferItemRequest articulo : articulos) {
+            Long tramite = tramitePorElemento.get(articulo.clave());
+            if (tramite != null) {
+                conflictos.add(articulo.getArticulo()
+                        + " (placa " + normalizarPlaca(articulo.getPlaca())
+                        + ", traspaso " + tramite + ")");
+            }
+        }
+
+        return conflictos.isEmpty() ? null : String.join("; ", conflictos);
     }
 
     /** Los elementos sin placa la guardan como punto, igual que ACTIFIJO. */

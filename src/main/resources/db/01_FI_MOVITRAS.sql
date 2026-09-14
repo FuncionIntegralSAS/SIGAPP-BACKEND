@@ -147,7 +147,24 @@ DECLARE
         'CREATE INDEX FI_MOVITRAS_IX_ESTA ON FI_MOVITRAS (MOTRESTA, MOTRFECR)',
         'CREATE INDEX FI_MOVITRAS_IX_PEDE ON FI_MOVITRAS (MOTRPEDE, MOTRESTA)',
         'CREATE INDEX FI_MOVITRAS_IX_PEFU ON FI_MOVITRAS (MOTRPEFU, MOTRESTA)',
-        'CREATE INDEX FI_MOVITRAS_IX_ARTI ON FI_MOVITRAS (MOTRARTI, MOTRPLAC)'
+        'CREATE INDEX FI_MOVITRAS_IX_ARTI ON FI_MOVITRAS (MOTRARTI, MOTRPLAC)',
+        --------------------------------------------------------------------
+        -- Un activo no puede estar en dos traspasos abiertos a la vez.
+        --
+        -- Indice unico PARCIAL: las dos expresiones devuelven NULL cuando el
+        -- tramite ya esta cerrado ('na' o 're'), y Oracle no indexa las
+        -- entradas cuyas columnas son TODAS nulas. Resultado: los cerrados no
+        -- ocupan el indice y no estorban, y entre los abiertos el par
+        -- (articulo, placa) es unico.
+        --
+        -- El paquete valida lo mismo antes de insertar, para dar un mensaje
+        -- legible en vez de un ORA-00001. Este indice es la red de seguridad
+        -- ante dos sesiones creando el mismo traspaso a la vez, que es la
+        -- unica ventana que la validacion en PL/SQL no puede cerrar.
+        --------------------------------------------------------------------
+        'CREATE UNIQUE INDEX FI_MOVITRAS_UK_ABIERTO ON FI_MOVITRAS (
+             CASE WHEN MOTRESTA IN (''pe'',''ap'') THEN MOTRARTI END,
+             CASE WHEN MOTRESTA IN (''pe'',''ap'') THEN MOTRPLAC END)'
     );
 BEGIN
     FOR i IN 1 .. sentencias.COUNT LOOP

@@ -54,6 +54,59 @@ public class TransferController {
     }
 
     /**
+     * Activos de una persona, para el selector de articulos al crear un traspaso.
+     *
+     * Devuelve tambien el centro de informacion y el tercero de cada elemento:
+     * un traspaso no puede mezclar articulos con valores distintos en esos dos
+     * campos, asi que el front puede impedir la seleccion en vez de descubrirlo
+     * con un error al crear. Y marca con {@code enTramite} los que ya estan
+     * dentro de un traspaso sin cerrar.
+     */
+    @Operation(summary = "Activos de una persona",
+               description = "Elementos de los que responde una persona, para elegir que se traspasa")
+    @GetMapping("/activos")
+    public ResponseEntity<ObjectListResponse> listAssetsByPerson(@Parameter(hidden = true) @RequestHeader("Authorization") String bearerToken,
+                                                                 @RequestParam String persona,
+                                                                 @RequestParam(required = false) String empresa) {
+
+        ObjectListResponse response = new ObjectListResponse();
+        try {
+            response = transferService.listarActivosDePersona(persona, empresa);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error listando los activos de la persona {}: {}", persona, e.getMessage(), e);
+            response.setCode(-1);
+            response.setMsg(MSG_ERROR + e.getMessage());
+            return ResponseEntity.status(500).body(response);
+        }
+    }
+
+    /**
+     * Personas de una bodega, para elegir fuente o destino.
+     *
+     * El vinculo es la division: la bodega pertenece a una y la persona tambien.
+     * La empresa es obligatoria porque la llave de BODEGA es (codigo, empresa).
+     */
+    @Operation(summary = "Personas de una bodega",
+               description = "Personas cuya division corresponde a esa bodega")
+    @GetMapping("/personas")
+    public ResponseEntity<ObjectListResponse> listPeopleByWarehouse(@Parameter(hidden = true) @RequestHeader("Authorization") String bearerToken,
+                                                                    @RequestParam String bodega,
+                                                                    @RequestParam String empresa) {
+
+        ObjectListResponse response = new ObjectListResponse();
+        try {
+            response = transferService.listarPersonasDeBodega(bodega, empresa);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error listando las personas de la bodega {}: {}", bodega, e.getMessage(), e);
+            response.setCode(-1);
+            response.setMsg(MSG_ERROR + e.getMessage());
+            return ResponseEntity.status(500).body(response);
+        }
+    }
+
+    /**
      * Bandeja de traspasos: una fila por TRAMITE, no por articulo.
      *
      * @param estado "pe" pendientes, "pr" procesados (ap, na, re) o un estado
