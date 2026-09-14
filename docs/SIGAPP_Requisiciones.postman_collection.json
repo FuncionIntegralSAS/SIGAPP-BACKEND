@@ -1,0 +1,995 @@
+{
+  "info": {
+    "name": "SIGAPP - Requisiciones",
+    "description": "Ciclo de vida de las requisiciones de suministro: in -> ap -> en -> rg, mas la anulacion al entregar.\n\nCOMO USARLA\n1. Pon tu clave en la variable de coleccion 'clave'.\n2. Ejecuta '1. Login': guarda el token solo, el resto lo hereda.\n3. Ejecuta los pasos 2 a 13 EN ORDEN sobre la misma requisicion.\n\nDOS COSAS QUE HACEN FALLAR LA PRUEBA\n\nSolo hay 10 tipos gestionables. Un tipo se gestiona si tiene equivalencia COBO/REQU en SRFPNACUA.EQUIVALE; hoy estan cargados solo los de agua (2601 a 2610). Los demas no aparecen en la bandeja ni se pueden aprobar.\n\nLa bodega tiene control de responsable. El parametro CONREBEQ esta activo, asi que entregar y registrar exigen que el usuario del token sea responsable de la bodega; aprobar no lo exige.\n\nPor eso el usuario por defecto es 'dflorez' (Diva Liliana Florez Micolta), que es responsable de 13 bodegas y cubre 31 de las requisiciones gestionables, incluida la de esta guia. Alternativa: 'fmartinez', que cubre 25. Para la requisicion de ejemplo (bodega F671) tambien sirven OCARABALI, lcanas, JJROJAS y czuluaga.\n\nOJO CON LAS MAYUSCULAS: el login compara USBDCODI sin normalizar, asi que hay que escribir el usuario EXACTO. 'dflorez' va en minuscula y 'JJROJAS' en mayuscula.\n\nEl usuario 'aarias' NO sirve para entregar: solo es responsable de F632, donde no hay requisiciones. Con el podras listar, consultar y aprobar.\n\nDATOS DE LA PRUEBA\nRequisicion 01/2607/202500459 (REQUISICION AGUA 7), en estado 'in', con una linea: articulo 1380205500 (resma de papel), bodega F671, secuencia 1, 120 solicitadas y 150 de saldo. Es de consumo, asi que no lleva placas y el FIFO no se ejercita: no hay ninguna requisicion gestionable con articulo devolutivo en este entorno.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "0. Verificar que la app tiene el modulo",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/v3/api-docs",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v3",
+            "api-docs"
+          ]
+        },
+        "description": "Publico, no necesita token. Debe listar las rutas de /api/v1/requisiciones.\n\nOJO: un 401 no sirve para comprobar si una ruta existe, porque la seguridad rechaza cualquier ruta no publica antes de resolverla.",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"El modulo de requisiciones esta cargado\", () => {",
+              "    pm.expect(pm.response.text()).to.include(\"/api/v1/requisiciones/tipos\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Login (guarda el token solo)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/auth/login",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "login"
+          ]
+        },
+        "description": "Pon tu clave en la variable de coleccion 'clave' antes de ejecutar.\n\nEl script guarda el token en la variable {{token}}, que usa el resto de la coleccion. Dura 8 horas.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{usuario}}\",\n  \"password\": \"{{clave}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Login correcto\", () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "if (r && r.token) {",
+              "    pm.collectionVariables.set(\"token\", r.token);",
+              "    console.log(\"Token guardado. Usuario:\", r.username);",
+              "} else {",
+              "    console.error(\"No vino token. Revisa usuario y clave.\");",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Tipos gestionables",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/requisiciones/tipos",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requisiciones",
+            "tipos"
+          ]
+        },
+        "description": "Tipos con equivalencia COBO/REQU cargada. Hoy son los 10 de agua (2601..2610).\n\nSi devuelve lista vacia, falta la equivalencia y el resto del flujo no funcionara. No es un fallo del codigo."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta 200\", () => pm.response.to.have.status(200));",
+              "const lista = pm.response.json().list;",
+              "pm.test(\"Hay tipos gestionables\", () => pm.expect(lista.length).to.be.above(0));",
+              "console.log(\"Tipos:\", lista.map(t => t.codigo + \" \" + t.nombre).join(\" | \"));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Bandeja: pendientes de aprobar",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/requisiciones?estado=in&empresa={{empresa}}&desde=2025-01-01",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requisiciones"
+          ],
+          "query": [
+            {
+              "key": "estado",
+              "value": "in"
+            },
+            {
+              "key": "empresa",
+              "value": "{{empresa}}"
+            },
+            {
+              "key": "desde",
+              "value": "2025-01-01"
+            }
+          ]
+        },
+        "description": "Una fila por documento, no por articulo.\n\n'desde' amplia la ventana, que por defecto son 90 dias: sin el no verias las requisiciones de 2025."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"code = 0 (sin rechazo de negocio)\", () => {",
+              "    pm.expect(pm.response.json().code).to.eql(0);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Detalle antes de tocar nada",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requisiciones",
+            "{{empresa}}",
+            "{{tipoDocumento}}",
+            "{{numero}}"
+          ]
+        },
+        "description": "Estado 'in', solicitada 120, el resto de cantidades en cero y firmas vacio: las dos filas de firma aun no existen, se crean al entregar."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta 200\", () => pm.response.to.have.status(200));",
+              "const d = pm.response.json().object;",
+              "console.log(\"Estado:\", d.estado, \"| lineas:\", d.lineas.length, \"| firmas:\", d.firmas.length);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Aprobar 100 de 120 (parcial)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}/aprobar",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requisiciones",
+            "{{empresa}}",
+            "{{tipoDocumento}}",
+            "{{numero}}",
+            "aprobar"
+          ]
+        },
+        "description": "Las lineas que no vengan en el cuerpo NO se tocan.\n\nAprobar no mueve inventario y no exige ser responsable de la bodega.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lineas\": [\n    {\n      \"articulo\": \"{{articulo}}\",\n      \"bodega\": \"{{bodega}}\",\n      \"secuencia\": 1,\n      \"cantidad\": 100\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"code = 0 (sin rechazo de negocio)\", () => {",
+              "    pm.expect(pm.response.json().code).to.eql(0);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Entregar las 100",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}/entregar",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requisiciones",
+            "{{empresa}}",
+            "{{tipoDocumento}}",
+            "{{numero}}",
+            "entregar"
+          ]
+        },
+        "description": "AQUI ACTUA EL CONTROL DE RESPONSABLE DE BODEGA (parametro CONREBEQ).\n\nSi el usuario del token no es responsable de la bodega, el ERP responde 'Usuario no autorizado Para realizar el Tramite'. En F671 pueden: dflorez, fmartinez, OCARABALI, lcanas, JJROJAS y czuluaga.\n\nEfectos: estado 'en' y se crean las dos filas de firma vacias.\n\nSi el articulo fuera devolutivo, el paquete asignaria aqui las placas mas antiguas del almacen (FIFO). Este es de consumo, asi que no lleva placas.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lineas\": [\n    {\n      \"articulo\": \"{{articulo}}\",\n      \"bodega\": \"{{bodega}}\",\n      \"secuencia\": 1,\n      \"cantidad\": 100\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"code = 0 (sin rechazo de negocio)\", () => {",
+              "    pm.expect(pm.response.json().code).to.eql(0);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Detalle: ya hay firmas pendientes",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requisiciones",
+            "{{empresa}}",
+            "{{tipoDocumento}}",
+            "{{numero}}"
+          ]
+        },
+        "description": "firmas[] trae dos entradas con firmada=false: posicion 1 (SA, salida) y posicion 2 (RE, recibe)."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Se abrieron las dos firmas\", () => {",
+              "    pm.expect(pm.response.json().object.firmas.length).to.eql(2);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Firmar salida (SA)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}/firmar",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requisiciones",
+            "{{empresa}}",
+            "{{tipoDocumento}}",
+            "{{numero}}",
+            "firmar"
+          ]
+        },
+        "description": "La firma va en base64; el valor por defecto es un PNG de 1x1 valido.\n\nNo hay orden entre las dos firmas: esta podria ir despues de la de recibe.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tipo\": \"SA\",\n  \"persona\": \"{{personaSalida}}\",\n  \"firma\": \"{{firmaBase64}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"code = 0 (sin rechazo de negocio)\", () => {",
+              "    pm.expect(pm.response.json().code).to.eql(0);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Firmar recibe (RE)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}/firmar",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requisiciones",
+            "{{empresa}}",
+            "{{tipoDocumento}}",
+            "{{numero}}",
+            "firmar"
+          ]
+        },
+        "description": "Ejecutalo DOS VECES: la segunda debe rechazarse indicando el instante en que se registro la primera. Esa es la garantia de que una firma no se pisa.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"tipo\": \"RE\",\n  \"persona\": \"{{personaRecibe}}\",\n  \"firma\": \"{{firmaBase64}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta 200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"code = 0 (sin rechazo de negocio)\", () => {",
+              "    pm.expect(pm.response.json().code).to.eql(0);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Ver la firma como imagen",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}/firmas/SA",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requisiciones",
+            "{{empresa}}",
+            "{{tipoDocumento}}",
+            "{{numero}}",
+            "firmas",
+            "SA"
+          ]
+        },
+        "description": "Devuelve los bytes con su Content-Type, fuera de la envoltura JSON. En Postman se ve en la pestana de vista previa."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Devuelve una imagen\", () => {",
+              "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"image\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Registrar la salida recibiendo 90 de 100",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}/registrar",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requisiciones",
+            "{{empresa}}",
+            "{{tipoDocumento}}",
+            "{{numero}}",
+            "registrar"
+          ]
+        },
+        "description": "PUNTO DE NO RETORNO: genera el documento en el ERP y no se deshace desde la aplicacion.\n\nEl cuerpo es OPCIONAL y solo hace falta para recibir menos de lo entregado; con {} se recibe todo.\n\nConsecuencia de la recepcion parcial: las 10 unidades entregadas y no recibidas no vuelven al inventario ni quedan anuladas.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"lineas\": [\n    {\n      \"articulo\": \"{{articulo}}\",\n      \"bodega\": \"{{bodega}}\",\n      \"secuencia\": 1,\n      \"cantidad\": 90\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Respuesta 200\", () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test(\"code = 0\", () => pm.expect(r.code).to.eql(0));",
+              "if (r.object) { console.log(\"Tipo de salida:\", r.object.tipoSalida, \"| ERP:\", r.object.mensaje); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Reintento: no debe duplicar el documento",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}/registrar",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requisiciones",
+            "{{empresa}}",
+            "{{tipoDocumento}}",
+            "{{numero}}",
+            "registrar"
+          ]
+        },
+        "description": "El paquete es reentrante: si ya esta en 'rg' responde el aviso y NO vuelve a llamar al ERP. Es lo que impide generar una segunda salida, que seria irreversible.",
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Avisa que ya estaba registrada\", () => {",
+              "    const r = pm.response.json();",
+              "    console.log(\"Mensaje:\", r.msg || JSON.stringify(r.object));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Detalle final",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "requisiciones",
+            "{{empresa}}",
+            "{{tipoDocumento}}",
+            "{{numero}}"
+          ]
+        },
+        "description": "Estado 'rg', recibida 90, y las dos firmas con su fechaFirma."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Quedo registrada\", () => {",
+              "    pm.expect(pm.response.json().object.estado).to.eql(\"rg\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Casos de error",
+      "description": "Rechazos que conviene provocar para comprobar que el modulo falla de forma legible. Ejecutalos sueltos, no en el recorrido.",
+      "item": [
+        {
+          "name": "Tipo sin equivalencia",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/requisiciones/01/201/499",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "requisiciones",
+                "01",
+                "201",
+                "499"
+              ]
+            },
+            "description": "El tipo 201 no tiene equivalencia COBO/REQU, asi que no es gestionable. Debe responder con un mensaje que nombre la clase, el tipo y el codigo que hay que dar de alta, no un ORA-01403."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rechazado con code = -1\", () => {",
+                  "    pm.expect(pm.response.json().code).to.eql(-1);",
+                  "});",
+                  "console.log(\"Mensaje:\", pm.response.json().msg);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Numero no numerico",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/abc",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "requisiciones",
+                "{{empresa}}",
+                "{{tipoDocumento}}",
+                "abc"
+              ]
+            },
+            "description": "Spring rechaza con 400 antes de llegar al service. Que el numero sea Long no es solo tipado: el procedimiento del ERP filtra las lineas con LIKE sobre ese valor, asi que un comodin barreria otras requisiciones."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rechazado por Spring con 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Aprobar mas de lo solicitado",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}/aprobar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "requisiciones",
+                "{{empresa}}",
+                "{{tipoDocumento}}",
+                "{{numero}}",
+                "aprobar"
+              ]
+            },
+            "description": "La cantidad aprobada no puede superar la solicitada.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lineas\": [\n    {\n      \"articulo\": \"{{articulo}}\",\n      \"bodega\": \"{{bodega}}\",\n      \"secuencia\": 1,\n      \"cantidad\": 999\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rechazado con code = -1\", () => {",
+                  "    pm.expect(pm.response.json().code).to.eql(-1);",
+                  "});",
+                  "console.log(\"Mensaje:\", pm.response.json().msg);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Linea repetida en la peticion",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}/aprobar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "requisiciones",
+                "{{empresa}}",
+                "{{tipoDocumento}}",
+                "{{numero}}",
+                "aprobar"
+              ]
+            },
+            "description": "Dos entradas para la misma linea: la segunda pisaria a la primera y el resultado dependeria del orden. Se rechaza sin escribir nada.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lineas\": [\n    {\n      \"articulo\": \"{{articulo}}\",\n      \"bodega\": \"{{bodega}}\",\n      \"secuencia\": 1,\n      \"cantidad\": 100\n    },\n    {\n      \"articulo\": \"{{articulo}}\",\n      \"bodega\": \"{{bodega}}\",\n      \"secuencia\": 1,\n      \"cantidad\": 100\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rechazado con code = -1\", () => {",
+                  "    pm.expect(pm.response.json().code).to.eql(-1);",
+                  "});",
+                  "console.log(\"Mensaje:\", pm.response.json().msg);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Firma con base64 invalido",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}/firmar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "requisiciones",
+                "{{empresa}}",
+                "{{tipoDocumento}}",
+                "{{numero}}",
+                "firmar"
+              ]
+            },
+            "description": "FirmaUtil valida los magic bytes: solo acepta PNG o JPEG. Se rechaza antes de tocar la base de datos.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"SA\",\n  \"persona\": \"{{personaSalida}}\",\n  \"firma\": \"esto-no-es-base64\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rechazado con code = -1\", () => {",
+                  "    pm.expect(pm.response.json().code).to.eql(-1);",
+                  "});",
+                  "console.log(\"Mensaje:\", pm.response.json().msg);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tipo de firma invalido",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/requisiciones/{{empresa}}/{{tipoDocumento}}/{{numero}}/firmar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "requisiciones",
+                "{{empresa}}",
+                "{{tipoDocumento}}",
+                "{{numero}}",
+                "firmar"
+              ]
+            },
+            "description": "Solo se admite SA (salida) o RE (recibe). Lo corta la validacion del DTO.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"XX\",\n  \"persona\": \"{{personaSalida}}\",\n  \"firma\": \"{{firmaBase64}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rechazado por validacion\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8082",
+      "type": "string"
+    },
+    {
+      "key": "usuario",
+      "value": "dflorez",
+      "type": "string"
+    },
+    {
+      "key": "clave",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "empresa",
+      "value": "01",
+      "type": "string"
+    },
+    {
+      "key": "tipoDocumento",
+      "value": "2607",
+      "type": "string"
+    },
+    {
+      "key": "numero",
+      "value": "202500459",
+      "type": "string"
+    },
+    {
+      "key": "articulo",
+      "value": "1380205500",
+      "type": "string"
+    },
+    {
+      "key": "bodega",
+      "value": "F671",
+      "type": "string"
+    },
+    {
+      "key": "personaSalida",
+      "value": "16822134",
+      "type": "string"
+    },
+    {
+      "key": "personaRecibe",
+      "value": "16801364",
+      "type": "string"
+    },
+    {
+      "key": "firmaBase64",
+      "value": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      "type": "string"
+    }
+  ]
+}

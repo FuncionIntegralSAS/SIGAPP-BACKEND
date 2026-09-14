@@ -563,3 +563,177 @@ SELECT object_type, status FROM user_objects WHERE object_name = 'PKG_FI_MOVITRA
 **Pendiente de confirmar con el área funcional:** `06_PARAOPER.sql` da de alta
 `ESAPTRAS` ("estado al aprobar traspaso") pero el paquete lee `ESTAAPRO`, que ese
 script no crea. Una de las dos sobra. Está marcado en un comentario del body.
+
+---
+
+# Módulo de Requisiciones
+
+Tercer módulo del backend (`/api/v1/requisiciones`), independiente de los otros dos.
+Lleva a la app el ciclo de vida de una **requisición de suministro**: aprobar, entregar,
+firmar y generar la salida de inventario.
+
+📄 **El detalle de BD está en `src/main/resources/db/requisiciones/README.md`.** Esta
+sección resume lo que es fácil de romper sin darse cuenta.
+
+## Lo que este módulo NO hace
+
+**No crea la requisición.** Nace en el ERP en estado `in` y SIGAPP solo la hace avanzar.
+**No genera el documento de inventario por su cuenta**: lo hace `PRO_GENERA_SALIREQU`, el
+procedimiento del ERP que está detrás de la forma PSSR. Y **no toca la cabecera**:
+`REQUSUMI.RESUESTA` se queda en `ac` siempre.
+
+Esta es la diferencia de fondo con traspasos, donde el documento lo armaba nuestro paquete.
+
+## Modelo de datos
+
+```
+REQUSUMI  1 ──── N  MOVIRESU     una fila por artículo, bodega y secuencia
+   │                    │
+   │                    └── N  ASPLMORS      placas, solo artículos devolutivos
+   └── 2  FI_REQUFIRM (nueva)                firma de salida y firma de recibe
+```
+
+La requisición se identifica por la **terna** `(MORSTDEM, MORSTIDO, MORSRENU)`, que es la
+llave de `REQUSUMI`. No hay identificador propio y no se inventa uno. Dentro de ella, una
+línea es el trío `(MORSARTI, MORSBODE, MORSSECU)`: el mismo artículo puede repetirse en
+otra bodega o secuencia, así que ninguna de las tres sobra.
+
+## Ciclo de vida
+
+```
+ in ──aprobar──▶ ap ──entregar──▶ en ──[dos firmas]──▶ registrar ──▶ rg
+                                   │                                 + DOCUINVE (1)
+                                   └──anular──▶ ae                   + MOVIINVE (N)
+```
+
+Aprobar y entregar admiten **cantidades parciales por línea**. Las líneas que no vengan en
+la petición no se tocan.
+
+## Invariantes que no se pueden romper
+
+⚠️ **`pro_set_contexto` va primero en toda transacción de escritura.** El parámetro
+`CONREBEQ` está activo, así que el trigger `TRGBUPR_MOVIRESU` exige que quien entrega o
+registra sea responsable de la bodega, y lo comprueba leyendo `pkgfnPersonal.getUsuario()`,
+una **variable de paquete de la sesión Oracle**. Con un pool de conexiones no se establece
+sola y una conexión reciclada conserva el valor anterior. Si queda nula, un `NVL` del
+trigger la iguala al responsable de la bodega y **el control se salta en silencio**. Hay un
+test que verifica el orden de las llamadas, y está ahí por esto.
+
+⚠️ **`MORSCARE` es una ENTRADA del registro, no un resultado.** `PRO_GENERA_SALIREQU` la
+lee como la cantidad que lleva a `MOVIINVE`, con ella calcula el costo y **si vale cero no
+genera movimiento para esa línea**. Nunca la escribe: lo único que escribe en `MOVIRESU` es
+`MORSESTA = rg`. Por eso `pro_generar_salida` la sella justo antes de llamarlo. Sin ese
+paso la línea pasa a `rg` sin mover inventario y nadie avisa — de las 101 313 líneas
+históricas en `rg`, unas 33 400 están así.
+
+🔒 **El documento de salida se genera al REGISTRAR, nunca al entregar**, y solo con las dos
+firmas. Misma regla de oro que en traspasos.
+
+🔒 **Las firmas no tienen orden y no mueven el estado.** Cualquiera puede llegar primero; la
+requisición se queda en `en` hasta que se registra. Quien firmó es quien tiene `REFIFEFI`
+no nulo.
+
+🔒 **Solo se gestiona lo que tenga equivalencia.** El tipo de documento de salida sale de
+`EQUIVALE` (`EQUICLEQ='COBO'`, `EQUITIPO='REQU'`), y esa misma fila es el filtro de tipos
+gestionables: sin ella el tipo no se lista, no sale en la bandeja y no se puede aprobar. Así
+quedan fuera las requisiciones de traslado, que son integración con el comercial. **Hay dos
+tablas `EQUIVALE`** —`SRFPNACUA` y `FPLPNACUA`— y la carga tiene que estar en la primera,
+que es donde el paquete la busca.
+
+🔒 **Un artículo devolutivo exige tantas placas en `ASPLMORS` como unidades se mueven.** Al
+entregar se contrasta con la cantidad entregada y al sellar la recibida, con esa. En una
+recepción parcial hay que **soltar** las placas que no se reciben o el ERP rechaza el
+registro.
+
+## Las placas se eligen solas, por orden de entrada
+
+`pro_asignar_placas_fifo` asigna las placas al entregar ordenando por
+`ACTIFIJO.ACFIFEEN` — **lo primero que entró al almacén es lo primero que sale** — con la
+placa como desempate, porque los activos entran por lotes con la misma fecha y sin un
+segundo criterio el resultado sería arbitrario entre ejecuciones.
+
+Con esto quien despacha recibe **la lista ya resuelta** en vez de tener que elegir, y la
+rotación del inventario deja de depender de que cada quien se acuerde. El detalle devuelve
+las placas en ese mismo orden (`buscarPorRequisicion` hace `JOIN` con `ACTIFIJO` y ordena
+por fecha de entrada), así que la pantalla es literalmente el orden de despacho.
+
+Tres detalles que sostienen la selección:
+
+| Filtro | Por qué |
+|---|---|
+| `ACFIBODE = MORSBODE` | El activo sigue en la bodega **fuente** (tipo `FI`, física) hasta que se registra la salida; ahí el ERP lo pasa a la bodega destino (tipo `PE`). Comprobado sobre los datos: las 12 filas históricas de `ASPLMORS` tienen el activo ya en `MORSBODS` |
+| `ACFIESTA = 'ac'` | No se despacha algo dado de baja |
+| `NOT EXISTS` sobre `ASPLMORS` de requisiciones en `in`/`ap`/`en` | Evita que dos requisiciones abiertas a la vez se lleven la misma placa. Las `rg` y `ae` no bloquean: su activo ya cambió de bodega |
+
+**El override manual se respeta.** Si el front envía placas para una línea, el FIFO solo
+completa la diferencia: cubre el caso real de que la más antigua esté dañada o no aparezca
+en el estante, sin obligar a salirse del sistema. La clasificación devolutivo/consumo la
+decide el ERP con `funValiClas` sobre `ARTICULO.ARTICLAS` (consumo = `ARTICONS` = `1`); no
+se replica en Java porque duplicarla la haría divergir.
+
+⚠️ **Que falten placas no es un caso de negocio.** El trigger ya validó la disponibilidad
+contra `ARTIBODE` antes de llegar ahí, así que si el FIFO no encuentra suficientes hay un
+desajuste entre el saldo de la bodega y los activos de `ACTIFIJO`. El mensaje lo dice con
+esas palabras para que se corrija, en vez de quedar en un error opaco del trigger.
+
+## El ERP hace el trabajo pesado
+
+El trigger `TRGBUPR_MOVIRESU` (516 líneas) se dispara en cada `UPDATE` de una línea: valida
+cantidades enteras para devolutivos, impide modificar cantidades ya comprometidas, valida
+disponibilidad contra `ARTIBODE`, valida y limpia las placas, y propaga a `ARTIBODE`,
+`SALDINLA` y `REQUSUMI.RESUFERE`.
+
+**El paquete no replica nada de eso.** Si un `UPDATE` de `PKG_FI_REQUISICION` parece
+demasiado simple, es por esto y no por descuido.
+
+Consecuencia práctica: el orden importa. El trigger rechaza modificar `MORSCAAP` si ya hay
+`MORSCARE` distinta de cero, así que aprobar va siempre antes de entregar.
+
+## Errores
+
+Los rechazos de negocio de este módulo vienen del ERP como `ORA-20008` ("no hay saldo
+suficiente", "faltan placas por asignar"). `OracleErrorUtil.mensajeNegocio` extrae ese texto
+y descarta la pila `ORA-06512`, que no le dice nada a quien está en el almacén.
+
+En el paquete, el bloque `EXCEPTION` de los procedimientos públicos **re-lanza** en vez de
+envolver cuando `pkgerror.funnivelerror` no es cero. Eso es lo que hace que el mensaje del
+ERP llegue intacto: sustituirlo por un `raise_application_error` plano lo perdería.
+
+**Los errores del ERP no se capturan en el service**, a propósito: convertirlos ahí en
+`code -1` dejaría la transacción sin marcar para rollback y las líneas ya procesadas
+quedarían confirmadas mientras la respuesta dice que falló. Se dejan propagar y el
+controller los traduce después de que Spring haya revertido.
+
+## Contrato de la API
+
+`{empresa}/{tipo}/{numero}` es la terna. `numero` se declara `Long` por seguridad, no solo
+por tipado: `PRO_GENERA_SALIREQU` filtra las líneas con `LIKE` sobre ese valor, así que un
+comodín barrería otras requisiciones. Exigir un entero lo hace imposible desde la API.
+
+| Endpoint | Devuelve |
+|---|---|
+| `GET /tipos` | Tipos gestionables. Vacío = falta la equivalencia |
+| `GET /?estado&empresa&tipoDocumento&bodega&desde` | Bandeja. Una fila por documento |
+| `GET /{e}/{t}/{n}` | Cabecera + `lineas[]` (con placas) + `firmas[]` |
+| `PUT /{e}/{t}/{n}/aprobar` | `lineas[]` con `cantidad` |
+| `PUT /{e}/{t}/{n}/entregar` | `lineas[]` con `cantidad` y `placas[]` |
+| `PUT /{e}/{t}/{n}/anular` | `lineas[]` sin cantidad: anula el saldo aprobado |
+| `PUT /{e}/{t}/{n}/firmar` | `tipo` (`SA`/`RE`), `persona`, `firma` en base64 |
+| `GET /{e}/{t}/{n}/firmas/{tipo}` | La imagen, con su `Content-Type` |
+| `PUT /{e}/{t}/{n}/registrar` | Punto de no retorno. Cuerpo opcional para recibir parcial |
+
+La bandeja lleva ventana temporal y tope por defecto: `MOVIRESU` tiene más de cien mil
+líneas y sin cota una consulta por `rg` traería media tabla.
+
+**Registrar es reentrante**: si la requisición ya está en `rg` devuelve el aviso y no vuelve
+a llamar al ERP. Eso es lo que impide que un reintento genere un segundo documento, que
+sería irreversible.
+
+## Pendientes
+
+- **Quién entregó y quién anuló no se guarda en el ERP.** `MOVIRESU` solo tiene
+  `MORSUSAP` para el aprobador y añadir una columna exigiría modificar una tabla del
+  sistema financiero. Va al log vía `pro_log`.
+- **Recepción parcial:** lo entregado y no recibido no vuelve al inventario ni queda como
+  anulado. Es la consecuencia aceptada de permitir recibir menos; conviene que el área
+  funcional lo tenga presente.

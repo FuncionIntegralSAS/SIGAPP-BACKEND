@@ -55,7 +55,9 @@ public class SecurityConfig {
             // Se declaran las dos formas: la raiz sin barra final (POST y GET de la
             // bandeja) y el resto del arbol.
             "/api/v1/traspasos",
-            "/api/v1/traspasos/**"
+            "/api/v1/traspasos/**",
+            "/api/v1/requisiciones",
+            "/api/v1/requisiciones/**"
     };
 
     @Bean
