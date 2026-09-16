@@ -16,6 +16,7 @@ public class AuthResponse {
     private String refreshToken;
     private String type;
     private String username;
+    private String documento;
     private long expiresIn;
     private List<RoleformResponse> permisos;
 }

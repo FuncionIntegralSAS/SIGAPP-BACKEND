@@ -17,4 +17,5 @@ public class UsabadaModel {
     private LocalDate usbdexco; // Expiración contraseña
     private Long usbdinfa; // Intentos fallidos
     private String usbdesta; // Estado
+    private String perscodi; // Persona documento
 }
