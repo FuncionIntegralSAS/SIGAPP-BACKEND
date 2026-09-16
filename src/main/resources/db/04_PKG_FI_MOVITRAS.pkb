@@ -347,9 +347,6 @@ create or replace package body pkg_fi_movitras is
    is
       in_repetido    number;
       sb_ceintramite requsumi.resucein%type;
-      rg_primero     actifijo%rowtype;
-      sb_artiprimero fi_movitras.motrarti%type;
-      sb_placprimero fi_movitras.motrplac%type;
    begin
       -- Repetido: se corta con mensaje propio en vez de dejar que reviente
       -- FI_MOVITRAS_UK_LINE con un ORA-00001 que no dice nada.
@@ -390,23 +387,19 @@ create or replace package body pkg_fi_movitras is
          raise pkgerror.generic;
       end if;
 
-      -- Tercero: se compara contra el del primer articulo del tramite, que es el
-      -- que quedara en DOCUINVE.DOINTERC.
-      select min(motrarti) keep (dense_rank first order by motridmt),
-             min(motrplac) keep (dense_rank first order by motridmt)
-        into sb_artiprimero, sb_placprimero
-        from fi_movitras
-       where motrnutr = p_motrnutr;
-
-      pkgtbactifijo.prosel(fun_acfiidin(sb_artiprimero,sb_placprimero),null,rg_primero);
-
-      if ( nvl(rg_actifijo.acfiterc,c_docuvacio) != nvl(rg_primero.acfiterc,c_docuvacio) ) then
-         pro_error('El elemento ['|| p_motrarti|| '] es del tercero ['
-                   || rg_actifijo.acfiterc || '] y el traspaso ['|| p_motrnutr
-                   || '] es del tercero ['|| rg_primero.acfiterc
-                   || ']. Un traspaso no puede mezclar terceros');
-         raise pkgerror.generic;
-      end if;
+      -- AQUI HABIA UNA VALIDACION DE TERCERO. Se quito a proposito.
+      --
+      -- Comparaba ACFITERC entre articulos y rechazaba el traspaso si no
+      -- coincidian. Estaba mal planteada: ACFITERC es "el tercero al que se
+      -- compra" -el PROVEEDOR del activo-, no su responsable ni su propietario.
+      -- Dos elementos comprados a proveedores distintos no tienen ningun motivo
+      -- para no poder cambiar de responsable en el mismo documento, y exigirlo
+      -- bloqueaba traspasos perfectamente validos.
+      --
+      -- La regla solo existia para sostener que DOCUINVE.DOINTERC se llenara con
+      -- ACFITERC, que era el error de fondo. El ERP pone ahi el NIT de la propia
+      -- empresa: ver pro_generar_movimiento y PRO_GENERA_SALIREQU, que usa
+      -- Empresa.EmprNit.
    end pro_valida_activo_tramite;
 
 
@@ -727,11 +720,33 @@ create or replace package body pkg_fi_movitras is
       in_secuencia  number := 0;
       sb_bodelogica varchar2(6);
       sb_concepto   varchar2(10);
+
+      -- Tercero del documento. Es el NIT de la propia empresa, no el proveedor
+      -- del activo: en un traspaso interno no interviene nadie de fuera. Es lo
+      -- que hace el ERP en la misma familia de operacion -ver
+      -- PRO_GENERA_SALIREQU, que declara su variable como Empresa.EmprNit%TYPE-
+      -- y lo confirman sus propios datos, donde DOINTERC y MOINTERC llevan
+      -- siempre el NIT de la compania en salidas y traslados.
+      sb_terceroemp empresa.emprnit%type;
    begin
       sb_bodelogica := fun_parametro(c_bodelogica);
       sb_concepto   := fun_parametro(c_conceptomovi);
       sb_estaacti   := fun_parametro(c_estadoactivo);
       sb_estaregi   := fun_parametro(c_estadoregi);
+
+      -------------------------------------------------------------------------
+      -- 0) NIT de la empresa, que es el tercero del documento
+      -------------------------------------------------------------------------
+      begin
+         select emprnit
+           into sb_terceroemp
+           from empresa
+          where emprcodi = rg_traspaso.motrdrem;
+      exception
+         when no_data_found then
+            pro_error('La empresa ['|| rg_traspaso.motrdrem || '] no existe o no tiene NIT');
+            raise pkgerror.generic;
+      end;
 
       -------------------------------------------------------------------------
       -- 1) Tipo de movimiento (MOINTIMO)
@@ -827,7 +842,9 @@ create or replace package body pkg_fi_movitras is
       -- es el identificador de negocio, no el id tecnico de una linea.
       rg_docuinve.doindoso := 'ID TRAMITE SIGAPP: '|| rg_traspaso.motrnutr;
       rg_docuinve.doinvalo := c_cero;
-      rg_docuinve.dointerc := rg_actifijo.acfiterc;
+      -- El NIT de la empresa, NO el proveedor del activo (ACFITERC). Un traspaso
+      -- es un movimiento interno y no interviene nadie de fuera.
+      rg_docuinve.dointerc := sb_terceroemp;
 
       pkgtbdocuinve.proins(rg_docuinve,c_no);
 
@@ -898,7 +915,8 @@ create or replace package body pkg_fi_movitras is
          rg_moviinve.moinpede := rg_traspaso.motrpede;
          rg_moviinve.moingere := c_no;
          rg_moviinve.moinplac := rg_linea.motrplac;
-         rg_moviinve.mointerc := rg_actifijo.acfiterc;
+         -- Mismo criterio que en la cabecera: el NIT de la empresa.
+         rg_moviinve.mointerc := sb_terceroemp;
          rg_moviinve.moinoper := c_operacion;
          rg_moviinve.mointiop := c_operacion;
          rg_moviinve.moinsign := c_no;

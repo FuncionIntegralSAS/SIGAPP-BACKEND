@@ -458,11 +458,20 @@ artículo. Por eso `pro_agregar_articulo` exige estado `pe`: el aprobador autori
 un conjunto concreto y colar uno más después saltaría esa autorización.
 
 🔒 **Un activo no puede estar en dos traspasos abiertos a la vez.** Lo cierran
-`na` y `re`; en `pe` o `ap` sigue comprometido. Lo garantizan dos cosas: el
-índice único parcial `FI_MOVITRAS_UK_ABIERTO` (a nivel de tabla, cubre la carrera
-entre dos sesiones) y `pro_valida_activo_libre` (mensaje legible en vez de
-`ORA-00001`). `GET /traspasos/activos` lo expone como `enTramite` para que el
-front lo bloquee antes.
+`na` y `re`; en `pe` o `ap` sigue comprometido. Tres capas, y cada una cubre algo
+distinto:
+
+| Capa | Qué cubre |
+|---|---|
+| `TransferServiceImpl.buscarComprometidos` | El caso real. Lista **todos** los conflictos con su placa y su trámite en un solo mensaje, antes de abrir el documento |
+| `pro_valida_activo_libre` | Quien llame el paquete directo desde SQL. Corta en el primer conflicto |
+| Índice `FI_MOVITRAS_UK_ABIERTO` | La carrera entre dos sesiones creando a la vez |
+
+El cruce es por el par **artículo + placa**, no solo por el código: el mismo
+artículo con otra placa es otro elemento físico. La placa vacía es `'.'` en los
+dos lados. `GET /traspasos/activos` lo expone como `enTramite` para que el front
+lo bloquee en el selector — se **marca**, no se excluye, para que el funcionario
+entienda por qué no puede usarlo.
 
 🔒 **Las firmas no tienen orden y no mueven el estado.** Cualquiera de las dos
 puede llegar primero; el trámite se queda en `ap` hasta que se recibe.
@@ -479,8 +488,27 @@ colección ni tocar `ProcedureExecutor`. Las N llamadas van en el mismo
 `@Transactional` del service.
 
 Todos los artículos de un trámite deben compartir **centro de información**
-(`ACFICEIN`) y **tercero** (`ACFITERC`): son datos de cabecera del documento y con
-valores distintos no hay uno correcto que poner. Se rechaza al agregar.
+(`ACFICEIN`): va a `REQUSUMI.RESUCEIN`, una sola columna para todo el documento, y con
+valores distintos no hay uno correcto que poner. Se valida dos veces —en
+`TransferServiceImpl.buscarIncompatibles` antes de abrir el documento, y en el paquete al
+agregar— por la misma razón que los activos comprometidos: el rechazo previo lista todos
+los implicados de golpe, el del paquete corta en el primero y ya con el documento creado.
+
+⚠️ **`ACFITERC` NO se valida, y no debe volver a validarse.** Es "el tercero al que se
+compra" —el **proveedor** del activo—, no su responsable ni su propietario. Hubo una regla
+que exigía que coincidiera entre artículos y bloqueaba traspasos legítimos: no se podían
+mover juntos un aire acondicionado y un medidor por haberse comprado a proveedores
+distintos, algo sin relación alguna con un cambio de responsable interno.
+
+Esa regla solo existía para sostener un error de fondo: `DOCUINVE.DOINTERC` se llenaba con
+`ACFITERC`. **El ERP pone ahí el NIT de la propia empresa** (`EMPRESA.EMPRNIT`), como hace
+`PRO_GENERA_SALIREQU` —que declara su variable como `Empresa.EmprNit%TYPE`— y como
+confirman sus datos: los documentos de salida y de traslado entre bodegas llevan siempre el
+NIT de la compañía. Corregido en `pro_generar_movimiento`, que ahora lee `EMPRNIT` para
+`DOINTERC` y `MOINTERC`.
+
+El responsable de un activo es **`ACFIPERS`**, que es otra columna y no interviene en esto:
+la fuente y el destino salen del trámite, que es la versión aprobada de quién entrega.
 
 ## Firmas
 
@@ -510,6 +538,8 @@ Ninguna ruta cambió de forma; `{id}` es el número de trámite.
 | `PUT sign/{id}` | `tipoFirma` (`FU`/`DE`) + `firma` en base64 |
 | `GET sign/{id}/{tipo}` | La imagen, con su `Content-Type`. Para soporte y navegador |
 | `PUT /{id}/recibir` | Exige las dos firmas y genera el inventario |
+| `GET /activos?persona&empresa` | Activos de una persona para el selector. Trae `centroInformacion`, `tercero` y `enTramite` |
+| `GET /personas?bodega&empresa` | Personas cuya división corresponde a esa bodega. `empresa` es obligatoria |
 
 **La bandeja y el detalle no duplican datos.** Lo que está en el detalle no se
 repite en la lista, y dentro del detalle cada dato vive en un solo sitio: las
