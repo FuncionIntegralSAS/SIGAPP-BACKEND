@@ -60,6 +60,7 @@ public class LoginServiceImpl implements LoginService {
                 .username(request.getUsername())
                 .expiresIn(100000)
                 .permisos(permisos.stream().distinct().toList())
+                .documento(usuario.getPerscodi().trim())
                 .build();
     }
 
