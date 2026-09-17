@@ -15,10 +15,10 @@ public interface BodegaJpaRepository extends JpaRepository<BodegaEntity, BodegaP
   @Query(value = """
       SELECT T.BODECODI,T.BODEEMPR, T.BODEDESC, T.BODEESTA
        FROM bodega T
-      WHERE T.BODEEMPR = :EMPRESA
-        AND T.BODETIBO = 'FI'
+      WHERE T.BODEEMPR = :empresa
+        AND T.BODETIBO = :tipo
       """, nativeQuery = true)
-  List<BodegaEntity> findByBodeEmpr(@Param("EMPRESA") String empresa);
+  List<BodegaEntity> findByBodeEmprAndType(@Param("empresa") String empresa, @Param("tipo") String tipo);
 
   @Query(value = """
       SELECT T.BODECODI, T.BODEEMPR, T.BODEDESC, T.BODEESTA

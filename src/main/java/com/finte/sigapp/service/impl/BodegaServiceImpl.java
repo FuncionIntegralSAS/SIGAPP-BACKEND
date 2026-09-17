@@ -21,8 +21,8 @@ public class BodegaServiceImpl implements BodegaService {
     private final BodegaJpaRepository bodegaJpaRepository;
 
     @Override
-    public List<BodegaDtoResponse> buscarTodas(String empresa) {
-        return bodegaJpaRepository.findByBodeEmpr(empresa).stream()
+    public List<BodegaDtoResponse> buscarTodas(String empresa, String tipo) {
+        return bodegaJpaRepository.findByBodeEmprAndType(empresa,tipo).stream()
                 .map(this::mapToDtoResponse)
                 .collect(Collectors.toList());
     }

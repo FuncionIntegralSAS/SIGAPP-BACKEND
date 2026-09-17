@@ -9,7 +9,7 @@ import java.util.List;
 public interface BodegaService {
     List<BodegaResponse> buscarPorDivision(String divisionId);
 
-    List<BodegaDtoResponse> buscarTodas(String empresa);
+    List<BodegaDtoResponse> buscarTodas(String empresa, String tipo);
 
     List<BodegasConteoPendientes> bodegasConteoPendientes(String empresa);
 }
