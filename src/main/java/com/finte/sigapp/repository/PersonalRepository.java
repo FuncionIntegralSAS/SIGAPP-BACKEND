@@ -44,6 +44,7 @@ public interface PersonalRepository extends JpaRepository<PersonalModel, Long> {
                 ON B.BODEDIVI = P.PERSDIVI
              WHERE B.BODECODI = :bodega
                AND B.BODEEMPR = :empresa
+               AND B.BODETIBO = 'PE'
                AND P.PERSESTA = 'ac'
              ORDER BY P.PERSNOMB, P.PERSAPEL
             """, nativeQuery = true)
