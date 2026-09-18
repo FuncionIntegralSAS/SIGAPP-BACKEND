@@ -67,11 +67,12 @@ public class TransferController {
     @GetMapping("/activos")
     public ResponseEntity<ObjectListResponse> listAssetsByPerson(@Parameter(hidden = true) @RequestHeader("Authorization") String bearerToken,
                                                                  @RequestParam String persona,
+                                                                 @RequestParam String bodega,
                                                                  @RequestParam(required = false) String empresa) {
 
         ObjectListResponse response = new ObjectListResponse();
         try {
-            response = transferService.listarActivosDePersona(persona, empresa);
+            response = transferService.listarActivosDePersona(persona, bodega, empresa);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Error listando los activos de la persona {}: {}", persona, e.getMessage(), e);

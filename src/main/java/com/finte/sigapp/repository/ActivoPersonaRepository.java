@@ -31,6 +31,9 @@ public interface ActivoPersonaRepository extends JpaRepository<ActivoPersonaMode
    * NOT NULL con esa misma convencion, y para que la clave del modelo nunca
    * llegue nula.
    *
+   * La bodega es obligatoria y va contra ACFIBODE: el selector solo muestra lo
+   * que la persona tiene en la bodega elegida como fuente del traspaso.
+   *
    * El filtro de empresa es opcional y va contra ACFIBOEM, la empresa de la
    * bodega donde esta el activo.
    */
@@ -51,9 +54,11 @@ public interface ActivoPersonaRepository extends JpaRepository<ActivoPersonaMode
         FROM ACTIFIJO A
        WHERE A.ACFIPERS = :persona
          AND A.ACFIESTA = 'ac'
+         AND A.ACFIBODE = :bodega
          AND (:empresa IS NULL OR A.ACFIBOEM = :empresa)
        ORDER BY A.ACFIOBSE, A.ACFIARTI
       """, nativeQuery = true)
   List<ActivoPersonaModel> buscarPorResponsable(@Param("persona") String persona,
+      @Param("bodega") String bodega,
       @Param("empresa") String empresa);
 }

@@ -38,3 +38,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Volcados de crash de la JVM
+hs_err_pid*.log

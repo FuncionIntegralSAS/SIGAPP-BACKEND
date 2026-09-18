@@ -50,9 +50,10 @@ public interface TransferService {
      * Activos de los que responde una persona, para el selector de articulos al
      * crear un traspaso. Marca los que ya estan en un traspaso sin cerrar.
      *
+     * @param bodega  obligatoria, la bodega donde esta el activo (ACFIBODE)
      * @param empresa opcional, filtra por la empresa de la bodega del activo
      */
-    ObjectListResponse listarActivosDePersona(String persona, String empresa);
+    ObjectListResponse listarActivosDePersona(String persona, String bodega, String empresa);
 
     /**
      * Personas asociadas a una bodega, para elegir fuente o destino. El vinculo

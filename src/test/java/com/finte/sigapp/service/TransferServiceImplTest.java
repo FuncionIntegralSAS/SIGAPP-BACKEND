@@ -708,11 +708,11 @@ class TransferServiceImplTest {
     @Test
     @DisplayName("listarActivosDePersona marca los que ya estan en un traspaso abierto")
     void listarActivosDePersona_MarcaLosComprometidos() {
-        when(activoPersonaRepository.buscarPorResponsable("PER_FUENTE", "001"))
+        when(activoPersonaRepository.buscarPorResponsable("PER_FUENTE", "B01", "001"))
                 .thenReturn(List.of(activo("ART-0012", "PL-771", "CEIN_A", 0),
                                     activo("ART-0034", "PL-802", "CEIN_A", 1)));
 
-        ObjectListResponse res = service.listarActivosDePersona("PER_FUENTE", "001");
+        ObjectListResponse res = service.listarActivosDePersona("PER_FUENTE", "B01", "001");
 
         assertEquals(CODE_OK, res.getCode());
         assertEquals(2, res.getList().size());
@@ -732,10 +732,10 @@ class TransferServiceImplTest {
     @Test
     @DisplayName("listarActivosDePersona trata un ENTRAMITE nulo como no comprometido")
     void listarActivosDePersona_ToleraEnTramiteNulo() {
-        when(activoPersonaRepository.buscarPorResponsable("PER_FUENTE", null))
+        when(activoPersonaRepository.buscarPorResponsable("PER_FUENTE", "B01", null))
                 .thenReturn(List.of(activo("ART-0012", ".", "CEIN_A", null)));
 
-        ObjectListResponse res = service.listarActivosDePersona("PER_FUENTE", null);
+        ObjectListResponse res = service.listarActivosDePersona("PER_FUENTE", "B01", null);
 
         assertFalse(((TransferAssetResponse) res.getList().get(0)).isEnTramite());
     }
