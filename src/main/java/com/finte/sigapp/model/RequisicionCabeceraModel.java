@@ -69,4 +69,12 @@ public class RequisicionCabeceraModel {
 
     @Column(name = "RESUTERC")
     private String tercero;
+
+    /** BODERESP de la bodega fuente. No es columna de REQUSUMI: viene del JOIN. */
+    @Column(name = "RESPBODE")
+    private String responsableBodega;
+
+    /** BODERESP de la bodega destino. No es columna de REQUSUMI: viene del JOIN. */
+    @Column(name = "RESPBODS")
+    private String responsableBodegaDestino;
 }
