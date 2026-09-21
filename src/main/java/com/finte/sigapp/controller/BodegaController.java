@@ -23,12 +23,12 @@ public class BodegaController {
 
     private final BodegaService bodegaService;
 
-    // GET /api/v1/bodegas/empresa/{empresa}
-    @GetMapping("/empresa/{empresa}")
-    @Operation(summary = "Obtener todas las bodegas por empresa", description = "Retorna una lista de bodegas filtradas por el código de empresa")
+    // GET /api/v1/bodegas/empresa/{empresa}/{tipo}
+    @GetMapping("/empresa/{empresa}/{tipo}")
+    @Operation(summary = "Obtener todas las bodegas por empresa y tipo", description = "Retorna una lista de bodegas filtradas por el código de empresa y tipo")
     @ApiResponse(responseCode = "200", description = "Lista de bodegas encontrada")
-    public ResponseEntity<List<BodegaDtoResponse>> getByEmpresa(@PathVariable String empresa) {
-        List<BodegaDtoResponse> bodegas = bodegaService.buscarTodas(empresa);
+    public ResponseEntity<List<BodegaDtoResponse>> getByEmpresa(@PathVariable String empresa,@PathVariable String tipo) {
+        List<BodegaDtoResponse> bodegas = bodegaService.buscarTodas(empresa, tipo);
 
         return ResponseEntity.ok(Optional.ofNullable(bodegas).orElse(Collections.emptyList()));
     }
