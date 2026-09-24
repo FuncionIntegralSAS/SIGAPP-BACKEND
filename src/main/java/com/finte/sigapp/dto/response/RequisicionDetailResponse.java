@@ -34,6 +34,15 @@ public class RequisicionDetailResponse {
     private String observacion;
     private String bodega;
     private String bodegaDestino;
+
+    /**
+     * Responsables (BODEGA.BODERESP) de la bodega fuente y la destino, en el
+     * mismo codigo de persona que {@code firmas[].persona}, para cruzarlos con
+     * las firmas de salida y de recibe. Nulos si la bodega no tiene responsable.
+     */
+    private String responsableBodega;
+    private String responsableBodegaDestino;
+
     private String centroInformacion;
     private String tercero;
 

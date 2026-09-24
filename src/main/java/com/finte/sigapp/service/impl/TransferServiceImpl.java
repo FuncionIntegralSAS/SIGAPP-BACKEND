@@ -297,12 +297,12 @@ public class TransferServiceImpl implements TransferService {
     }
 
     @Override
-    public ObjectListResponse listarActivosDePersona(String persona, String empresa) {
+    public ObjectListResponse listarActivosDePersona(String persona, String bodega, String empresa) {
 
-        log.info("Listando activos de la persona {} - empresa {}", persona, empresa);
+        log.info("Listando activos de la persona {} - bodega {} - empresa {}", persona, bodega, empresa);
 
         List<Object> activos = new ArrayList<>(
-                activoPersonaRepository.buscarPorResponsable(persona, empresa).stream()
+                activoPersonaRepository.buscarPorResponsable(persona, bodega, empresa).stream()
                         .map(this::mapToAsset)
                         .toList());
 

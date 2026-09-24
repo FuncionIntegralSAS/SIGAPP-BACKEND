@@ -538,7 +538,7 @@ Ninguna ruta cambió de forma; `{id}` es el número de trámite.
 | `PUT sign/{id}` | `tipoFirma` (`FU`/`DE`) + `firma` en base64 |
 | `GET sign/{id}/{tipo}` | La imagen, con su `Content-Type`. Para soporte y navegador |
 | `PUT /{id}/recibir` | Exige las dos firmas y genera el inventario |
-| `GET /activos?persona&empresa` | Activos de una persona para el selector. Trae `centroInformacion`, `tercero` y `enTramite` |
+| `GET /activos?persona&bodega&empresa` | Activos de una persona en esa bodega, para el selector. `bodega` es obligatoria. Trae `centroInformacion`, `tercero` y `enTramite` |
 | `GET /personas?bodega&empresa` | Personas cuya división corresponde a esa bodega. `empresa` es obligatoria |
 
 **La bandeja y el detalle no duplican datos.** Lo que está en el detalle no se

@@ -463,6 +463,8 @@ public class RequisicionServiceImpl implements RequisicionService {
                 .observacion(cabecera.getObservacion())
                 .bodega(cabecera.getBodega())
                 .bodegaDestino(cabecera.getBodegaDestino())
+                .responsableBodega(cabecera.getResponsableBodega())
+                .responsableBodegaDestino(cabecera.getResponsableBodegaDestino())
                 .centroInformacion(cabecera.getCentroInformacion())
                 .tercero(cabecera.getTercero())
                 .lineas(lineas.stream().map(linea -> mapearLinea(linea, placas)).toList())
