@@ -23,6 +23,7 @@ import com.finte.sigapp.model.MovitrasTraspasoModel;
 import com.finte.sigapp.model.PersonalModel;
 import com.finte.sigapp.repository.ActivoCompatibilidadRepository;
 import com.finte.sigapp.repository.ActivoPersonaRepository;
+import com.finte.sigapp.repository.BodegaJpaRepository;
 import com.finte.sigapp.repository.MotrfirmRepository;
 import com.finte.sigapp.repository.MovitrasRepository;
 import com.finte.sigapp.repository.PersonalRepository;
@@ -71,6 +72,12 @@ public class TransferServiceImpl implements TransferService {
      */
     private static final List<String> ESTADOS_ABIERTOS = List.of(ESTADO_PENDIENTE, ESTADO_APROBADO);
 
+    /**
+     * Tipo de bodega personal (BODETIBO). Es el unico en el que el ERP acepta
+     * un traspaso, y el mismo literal que ya filtra las personas de una bodega.
+     */
+    private static final String TIPO_BODEGA_PERSONAL = "PE";
+
     private final TransferRepository repository;
     private final TransferJpaRepository transferJpaRepository;
     private final MovitrasRepository movitrasRepository;
@@ -78,6 +85,7 @@ public class TransferServiceImpl implements TransferService {
     private final ActivoPersonaRepository activoPersonaRepository;
     private final ActivoCompatibilidadRepository activoCompatibilidadRepository;
     private final PersonalRepository personalRepository;
+    private final BodegaJpaRepository bodegaJpaRepository;
     private final JwtTokenProvider tokenProvider;
     private final FirmaUtil firmaUtil;
     private final int maxArticulos;
@@ -89,6 +97,7 @@ public class TransferServiceImpl implements TransferService {
                                ActivoPersonaRepository activoPersonaRepository,
                                ActivoCompatibilidadRepository activoCompatibilidadRepository,
                                PersonalRepository personalRepository,
+                               BodegaJpaRepository bodegaJpaRepository,
                                JwtTokenProvider tokenProvider,
                                FirmaUtil firmaUtil,
                                @Value("${app.traspasos.max-articulos:50}") int maxArticulos) {
@@ -99,6 +108,7 @@ public class TransferServiceImpl implements TransferService {
         this.activoPersonaRepository = activoPersonaRepository;
         this.activoCompatibilidadRepository = activoCompatibilidadRepository;
         this.personalRepository = personalRepository;
+        this.bodegaJpaRepository = bodegaJpaRepository;
         this.tokenProvider = tokenProvider;
         this.firmaUtil = firmaUtil;
         this.maxArticulos = maxArticulos;
@@ -142,7 +152,15 @@ public class TransferServiceImpl implements TransferService {
                     "No se puede crear el traspaso. Ya estan en un traspaso abierto: " + comprometidos);
         }
 
-        String incompatibles = buscarIncompatibles(request.getEmpresa(), articulos);
+        Map<String, ActivoCompatibilidadModel> datosPorElemento =
+                datosDeCabecera(request.getEmpresa(), articulos);
+
+        String fueraDeBodegaPersonal = buscarFueraDeBodegaPersonal(datosPorElemento, articulos);
+        if (fueraDeBodegaPersonal != null) {
+            return new ObjectResponse(CODE_ERROR, fueraDeBodegaPersonal);
+        }
+
+        String incompatibles = buscarIncompatibles(datosPorElemento, articulos);
         if (incompatibles != null) {
             return new ObjectResponse(CODE_ERROR, incompatibles);
         }
@@ -301,6 +319,18 @@ public class TransferServiceImpl implements TransferService {
 
         log.info("Listando activos de la persona {} - bodega {} - empresa {}", persona, bodega, empresa);
 
+        // Lo que hay en una bodega que no es personal no se puede traspasar (el ERP
+        // lo rechaza al recibir). Se dice aqui, con el motivo, en vez de devolver
+        // una lista que el funcionario elegiria para chocar al final del ciclo.
+        // Una bodega inexistente sigue de largo: la consulta la devuelve vacia.
+        String tipoBodega = bodegaJpaRepository.buscarTipo(bodega, empresa);
+        if (tipoBodega != null && !TIPO_BODEGA_PERSONAL.equals(tipoBodega)) {
+            return new ObjectListResponse(CODE_ERROR,
+                    "La bodega " + bodega + " es de tipo [" + tipoBodega + "]: solo se pueden "
+                            + "traspasar activos de bodegas personales [" + TIPO_BODEGA_PERSONAL + "]",
+                    List.of());
+        }
+
         List<Object> activos = new ArrayList<>(
                 activoPersonaRepository.buscarPorResponsable(persona, bodega, empresa).stream()
                         .map(this::mapToAsset)
@@ -429,6 +459,69 @@ public class TransferServiceImpl implements TransferService {
     }
 
     /**
+     * Datos de ACTIFIJO de los elementos de la solicitud, indexados por la clave
+     * articulo|placa. Se leen una vez y los usan las dos validaciones de cabecera.
+     *
+     * La consulta filtra por codigo de articulo; el indice por el par exacto es
+     * lo que permite el cruce, porque el mismo articulo con otra placa es otro
+     * elemento fisico.
+     */
+    private Map<String, ActivoCompatibilidadModel> datosDeCabecera(String empresa,
+                                                                   List<TransferItemRequest> articulos) {
+
+        List<String> codigos = articulos.stream()
+                .map(TransferItemRequest::getArticulo)
+                .distinct()
+                .toList();
+
+        Map<String, ActivoCompatibilidadModel> porElemento = new HashMap<>();
+        for (ActivoCompatibilidadModel dato : activoCompatibilidadRepository.buscarDatosDeCabecera(codigos, empresa)) {
+            porElemento.putIfAbsent(dato.getAcfiarti() + "|" + dato.getAcfiplac(), dato);
+        }
+        return porElemento;
+    }
+
+    /**
+     * Elementos que estan en una bodega que no es personal.
+     *
+     * El traspaso del ERP (PKGFNTRASPASOS.protraspaso, que se dispara al
+     * insertar el MOVIINVE) exige que la bodega fuente sea de tipo PE, y la
+     * fuente es ACFIBODE: donde el inventario cree que esta hoy el activo. Un
+     * activo en una bodega fisica se dejaba crear, aprobar y firmar, y moria
+     * al RECIBIR, cuando ya estaban las dos firmas y el tramite no tenia salida
+     * (comprobado el 2026-09-24 con el tramite 11). La destino no hace falta
+     * validarla: el paquete la resuelve siempre entre las bodegas personales de
+     * la division de la persona.
+     *
+     * Como con los comprometidos, se listan todos de una vez; el paquete
+     * conserva la validacion como respaldo y corta en el primero.
+     *
+     * @return el mensaje de rechazo, o null si todos estan en bodega personal
+     */
+    private String buscarFueraDeBodegaPersonal(Map<String, ActivoCompatibilidadModel> porElemento,
+                                               List<TransferItemRequest> articulos) {
+
+        List<String> fuera = new ArrayList<>();
+        for (TransferItemRequest articulo : articulos) {
+            ActivoCompatibilidadModel dato = porElemento.get(articulo.clave());
+
+            if (dato != null && !TIPO_BODEGA_PERSONAL.equals(dato.getBodetibo())) {
+                String tipo = StringUtils.hasText(dato.getBodetibo()) ? dato.getBodetibo() : "sin tipo";
+                fuera.add(dato.getAcfiobse() + " (" + dato.getAcfiarti()
+                        + ", placa " + dato.getAcfiplac() + ") en la bodega "
+                        + dato.getAcfibode() + " [" + tipo + "]");
+            }
+        }
+
+        if (fuera.isEmpty()) {
+            return null;
+        }
+
+        return "No se puede crear el traspaso: solo se pueden traspasar activos que esten en una "
+                + "bodega personal [" + TIPO_BODEGA_PERSONAL + "]. " + String.join("; ", fuera);
+    }
+
+    /**
      * Comprueba que todos los elementos compartan centro de informacion, que es
      * dato de CABECERA: ACFICEIN acaba en REQUSUMI.RESUCEIN, una sola columna
      * para todo el documento. Con valores distintos no hay uno correcto que
@@ -454,26 +547,8 @@ public class TransferServiceImpl implements TransferService {
      *
      * @return el mensaje de rechazo, o null si todos son compatibles
      */
-    private String buscarIncompatibles(String empresa, List<TransferItemRequest> articulos) {
-
-        List<String> codigos = articulos.stream()
-                .map(TransferItemRequest::getArticulo)
-                .distinct()
-                .toList();
-
-        List<ActivoCompatibilidadModel> datos =
-                activoCompatibilidadRepository.buscarDatosDeCabecera(codigos, empresa);
-
-        if (datos.isEmpty()) {
-            return null;
-        }
-
-        // El filtro fue por codigo de articulo; aqui se cruza el par exacto,
-        // porque el mismo articulo con otra placa es otro elemento fisico.
-        Map<String, ActivoCompatibilidadModel> porElemento = new HashMap<>();
-        for (ActivoCompatibilidadModel dato : datos) {
-            porElemento.putIfAbsent(dato.getAcfiarti() + "|" + dato.getAcfiplac(), dato);
-        }
+    private String buscarIncompatibles(Map<String, ActivoCompatibilidadModel> porElemento,
+                                       List<TransferItemRequest> articulos) {
 
         Map<String, List<String>> porCentro = new LinkedHashMap<>();
         for (TransferItemRequest articulo : articulos) {

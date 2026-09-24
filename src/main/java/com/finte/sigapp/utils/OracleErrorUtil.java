@@ -35,6 +35,22 @@ public final class OracleErrorUtil {
     private static final Pattern ERROR_NEGOCIO =
             Pattern.compile("ORA-20\\d{3}:\\s*(.+?)(?=\\s*ORA-\\d{5}|$)", Pattern.DOTALL);
 
+    /**
+     * Ubicacion que {@code pkgerror.funmensaje} antepone al texto:
+     * {@code package body SRFPNACUA.PKG_FI_MOVITRAS.PRO_RECIBIR.0      121 |}.
+     * Es el nombre del objeto y la linea, util en el log y ruido en pantalla.
+     */
+    private static final Pattern PREFIJO_PKGERROR =
+            Pattern.compile("^(?:package body|package|procedure|function|trigger)\\s+\\S+\\s+\\d+\\s*\\|\\s*",
+                    Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Enlace de ayuda que Oracle 23 anade detras del mensaje cuando no le sigue
+     * otro ORA-: {@code https://docs.oracle.com/error-help/db/ora-20008/}. Si
+     * queda en el texto, tambien arrastra lo que el driver pone despues.
+     */
+    private static final Pattern ENLACE_AYUDA = Pattern.compile("\\s*https?://docs\\.oracle\\.com/.*$", Pattern.DOTALL);
+
     private OracleErrorUtil() {
     }
 
@@ -65,8 +81,13 @@ public final class OracleErrorUtil {
         return error != null && error.getMessage() != null ? error.getMessage() : "Error desconocido";
     }
 
-    /** Colapsa saltos de linea y espacios repetidos, que PL/SQL introduce al concatenar. */
+    /**
+     * Quita el enlace de ayuda y la ubicacion de pkgerror, y colapsa los saltos
+     * de linea y espacios repetidos que PL/SQL introduce al concatenar.
+     */
     private static String limpiar(String mensaje) {
-        return mensaje.replaceAll("\\s+", " ").trim();
+        String sinEnlace = ENLACE_AYUDA.matcher(mensaje).replaceFirst("");
+        String sinUbicacion = PREFIJO_PKGERROR.matcher(sinEnlace.trim()).replaceFirst("");
+        return sinUbicacion.replaceAll("\\s+", " ").trim();
     }
 }

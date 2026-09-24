@@ -494,6 +494,16 @@ valores distintos no hay uno correcto que poner. Se valida dos veces —en
 agregar— por la misma razón que los activos comprometidos: el rechazo previo lista todos
 los implicados de golpe, el del paquete corta en el primero y ya con el documento creado.
 
+🔒 **Solo se traspasan activos que estén en una bodega personal (`PE`).** Al recibir, cada
+`MOVIINVE` lleva `MOINBOFU = ACFIBODE` y `PKGFNTRASPASOS.protraspaso` —el traspaso del ERP,
+que además es quien cambia `ACFIPERS`/`ACFIBODE` en `ACTIFIJO`— rechaza el movimiento si
+una bodega es física: *"Deben ser de Tipo Personal"*. Sin validarlo antes, el trámite se
+creaba, se aprobaba, se firmaba y moría al final (trámite 11, 2026-09-24). Tres capas:
+`TransferServiceImpl.buscarFueraDeBodegaPersonal` lista todos los implicados al crear,
+`GET /activos` responde `code -1` si la bodega pedida no es `PE`, y `pro_valida_bodega_activo`
+es el respaldo del paquete. La destino no se valida: `fun_bodega_persona` ya la resuelve
+entre las bodegas `BODEPERS`.
+
 ⚠️ **`ACFITERC` NO se valida, y no debe volver a validarse.** Es "el tercero al que se
 compra" —el **proveedor** del activo—, no su responsable ni su propietario. Hubo una regla
 que exigía que coincidiera entre artículos y bloqueaba traspasos legítimos: no se podían

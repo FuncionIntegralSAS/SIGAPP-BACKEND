@@ -312,6 +312,14 @@ Decisiones de mapeo que no son obvias leyendo el código:
   trigger que numere, a diferencia de `REQUSUMI`.
 - **Bodega fuente** (`MOINBOFU`): `ACTIFIJO.ACFIBODE`, la bodega donde el
   inventario cree que está hoy el activo — no la bodega de la persona fuente.
+  **Tiene que ser personal (`PE`)**: el trigger de `MOVIINVE` llama a
+  `PKGFNTRASPASOS.protraspaso`, que rechaza el movimiento si alguna bodega es
+  física. Por eso `pro_crear_solicitud` y `pro_agregar_articulo` llaman a
+  `pro_valida_bodega_activo` antes de aceptar el activo, en vez de dejar que el
+  error salga al recibir con las dos firmas ya puestas.
+- **Cambio de responsable**: lo hace el mismo `protraspaso` del ERP al insertar
+  cada `MOVIINVE` (`ACFIPERS`, `ACFIBODE`, `ACFICEIN` y los componentes de
+  `REGICOMP`). Verificado el 2026-09-24 con el trámite 12.
 - **Bodegas lógicas** (`MOINBLFU` / `MOINBLDE`): la constante `'.'`, la misma que
   ya se guardó en `RESUBLFU` / `RESUBLDE`.
 - **Costos** (`MOINCOST`, `MOINCPNA`, `MOINCOTO`, `MOINCOAJ`, `MOINCOTR`): todos
@@ -381,10 +389,6 @@ antes de llamar a `pro_registrar_firma`, y lo vuelve a codificar en el detalle.
   esa foránea se podría declarar.
 - **Tope de artículos por trámite**: pendiente de fijar. Cada artículo es una
   línea de `MOVIINVE` dentro de la misma transacción de aprobación.
-- `pro_recibir` deja marcado el punto donde va el **cambio de responsable en
-  `ACTIFIJO`** (`ACFIPERS` / `ACFIBODE`), justo después de generar el movimiento
-  de inventario. Con varios artículos por trámite ese enganche deja de ser una
-  línea y pasa a ser un bucle sobre las líneas del `MOTRNUTR`.
 - `05_SINONIMOS.sql` cubre los cinco objetos propios del módulo: las dos tablas,
   las dos secuencias y el paquete. Las tablas y paquetes nuevos del
   ERP los resuelve `SRFPNACUA` directamente, que es donde compila el paquete.

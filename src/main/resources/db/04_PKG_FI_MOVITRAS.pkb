@@ -330,6 +330,44 @@ create or replace package body pkg_fi_movitras is
 
 
    -----------------------------------------------------------------------------
+   -- pro_valida_bodega_activo
+   --
+   -- El activo tiene que estar en una bodega personal: la del parametro
+   -- BODEPERS, la misma con que fun_bodega_persona resuelve las bodegas de la
+   -- fuente y del destino.
+   --
+   -- La razon es el ERP. Al recibir, cada MOVIINVE lleva MOINBOFU = ACFIBODE y
+   -- PKGFNTRASPASOS.protraspaso rechaza el movimiento si alguna de las dos
+   -- bodegas es fisica ("Deben ser de Tipo Personal"). Sin esta comprobacion el
+   -- tramite se creaba, se aprobaba y se firmaba, y moria al final con las dos
+   -- firmas puestas (tramite 11, 2026-09-24).
+   --
+   -- El backend lo valida antes y lista todos los implicados; esto es el
+   -- respaldo para quien llame el paquete directo, y corta en el primero.
+   -----------------------------------------------------------------------------
+   procedure pro_valida_bodega_activo ( p_motrarti  in fi_movitras.motrarti%type,
+                                        p_motrplac  in fi_movitras.motrplac%type,
+                                        rg_actifijo in actifijo%rowtype )
+   is
+      sb_tipobodega bodega.bodetibo%type;
+   begin
+      select max(b.bodetibo)
+        into sb_tipobodega
+        from bodega b
+       where b.bodecodi = rg_actifijo.acfibode
+         and b.bodeempr = rg_actifijo.acfiboem;
+
+      if ( nvl(sb_tipobodega,'-') != fun_parametro(c_tipobodega) ) then
+         pro_error('El elemento ['|| p_motrarti|| '] con placa ['|| p_motrplac
+                   || '] esta en la bodega ['|| rg_actifijo.acfibode || '] de tipo ['
+                   || nvl(sb_tipobodega,'sin tipo') || ']. Solo se pueden traspasar activos de bodegas personales ['
+                   || fun_parametro(c_tipobodega) || ']');
+         raise pkgerror.generic;
+      end if;
+   end pro_valida_bodega_activo;
+
+
+   -----------------------------------------------------------------------------
    -- pro_valida_activo_tramite
    --
    -- Comprueba que un activo pueda entrar en un tramite que ya tiene lineas.
@@ -516,6 +554,8 @@ create or replace package body pkg_fi_movitras is
          raise pkgerror.generic;
       end if;
 
+      pro_valida_bodega_activo(p_motrarti,p_motrplac,rg_actifijo);
+
       -------------------------------------------------------------------------
       -- Configuracion y datos derivados
       -------------------------------------------------------------------------
@@ -655,6 +695,8 @@ create or replace package body pkg_fi_movitras is
       -- validador de traspasos abiertos lo encontraria aqui mismo y diria "ya
       -- esta en el traspaso N" apuntando al propio tramite, que confunde.
       pro_valida_activo_tramite(p_motrnutr,p_motrarti,p_motrplac,rg_actifijo);
+
+      pro_valida_bodega_activo(p_motrarti,p_motrplac,rg_actifijo);
 
       pro_valida_activo_libre(p_motrarti,p_motrplac);
 
@@ -1190,22 +1232,9 @@ create or replace package body pkg_fi_movitras is
              motrupby = p_usuario
        where motrnutr = p_motrnutr;
 
-      -------------------------------------------------------------------------
-      -- Punto de enganche con el ERP
-      --
-      -- Aqui va el cambio de responsable en ACTIFIJO (ACFIPERS / ACFIBODE), que
-      -- acompana al movimiento de inventario recien generado. Con varios
-      -- articulos por tramite ya no es una linea sino un bucle sobre las lineas
-      -- del MOTRNUTR. Se deja marcado en vez de inventado porque depende del
-      -- concepto de movimiento configurado, que es justamente lo que se esta
-      -- parametrizando.
-      --
-      --   for rg_linea in ( select motrarti, motrplac
-      --                       from fi_movitras
-      --                      where motrnutr = p_motrnutr ) loop
-      --      ...
-      --   end loop;
-      -------------------------------------------------------------------------
+      -- El cambio de responsable en ACTIFIJO (ACFIPERS, ACFIBODE, ACFICEIN) no se
+      -- hace aqui: lo hace el ERP, PKGFNTRASPASOS.protraspaso, al insertar cada
+      -- MOVIINVE en pro_generar_movimiento.
 
       pkgerror.prounseterror;
    exception

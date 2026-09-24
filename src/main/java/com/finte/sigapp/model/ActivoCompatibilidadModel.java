@@ -19,6 +19,9 @@ import lombok.NoArgsConstructor;
  * un valor correcto que poner, y tomar el del primero mandaria el documento a un
  * centro equivocado sin que nadie se entere.
  *
+ * Trae tambien la bodega del activo y su tipo, que deciden si el ERP acepta
+ * moverlo: su traspaso exige que la bodega fuente sea personal.
+ *
  * NO se incluye el tercero. {@code ACFITERC} es "el tercero al que se compra"
  * -el proveedor del activo- y no tiene relacion con un cambio de responsable
  * interno; el documento lleva el NIT de la propia empresa.
@@ -49,4 +52,20 @@ public class ActivoCompatibilidadModel {
 
     @Column(name = "ACFICEIN")
     private String acficein;
+
+    /**
+     * Bodega donde el inventario cree que esta hoy el activo. Es la que acaba en
+     * {@code MOVIINVE.MOINBOFU} al recibir, asi que decide si el ERP acepta el
+     * traspaso.
+     */
+    @Column(name = "ACFIBODE")
+    private String acfibode;
+
+    /**
+     * Tipo de esa bodega ({@code BODEGA.BODETIBO}). El traspaso del ERP solo
+     * mueve activos entre bodegas personales ({@code PE}); nulo si la bodega no
+     * aparece en {@code BODEGA}.
+     */
+    @Column(name = "BODETIBO")
+    private String bodetibo;
 }
