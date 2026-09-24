@@ -22,6 +22,7 @@ import com.finte.sigapp.model.MovitrasTraspasoModel;
 import com.finte.sigapp.model.PersonalModel;
 import com.finte.sigapp.repository.ActivoCompatibilidadRepository;
 import com.finte.sigapp.repository.ActivoPersonaRepository;
+import com.finte.sigapp.repository.BodegaJpaRepository;
 import com.finte.sigapp.repository.MotrfirmRepository;
 import com.finte.sigapp.repository.MovitrasRepository;
 import com.finte.sigapp.repository.PersonalRepository;
@@ -86,6 +87,9 @@ class TransferServiceImplTest {
     private PersonalRepository personalRepository;
 
     @Mock
+    private BodegaJpaRepository bodegaJpaRepository;
+
+    @Mock
     private JwtTokenProvider tokenProvider;
 
     private TransferServiceImpl service;
@@ -104,6 +108,7 @@ class TransferServiceImplTest {
                 activoPersonaRepository,
                 activoCompatibilidadRepository,
                 personalRepository,
+                bodegaJpaRepository,
                 tokenProvider,
                 new FirmaUtil(MAX_BYTES_FIRMA),
                 MAX_ARTICULOS);
@@ -193,14 +198,71 @@ class TransferServiceImplTest {
         verify(repository, times(2)).agregarArticulo(anyLong(), any(), any(), any());
     }
 
-    /** Activo con el dato que obliga a que el traspaso sea homogeneo. */
+    /** Activo con el dato que obliga a que el traspaso sea homogeneo, en una bodega personal. */
     private ActivoCompatibilidadModel activoCon(String codigo, String placa, String centroInformacion) {
+        return activoEnBodega(codigo, placa, centroInformacion, "2571", "PE");
+    }
+
+    private ActivoCompatibilidadModel activoEnBodega(String codigo, String placa, String centroInformacion,
+                                                     String bodega, String tipoBodega) {
         return ActivoCompatibilidadModel.builder()
                 .acfiarti(codigo)
                 .acfiplac(placa)
                 .acfiobse("Elemento " + codigo)
                 .acficein(centroInformacion)
+                .acfibode(bodega)
+                .bodetibo(tipoBodega)
                 .build();
+    }
+
+    /**
+     * El caso del tramite 11: activos en una bodega fisica pasaban la creacion,
+     * la aprobacion y las dos firmas, y el ERP los rechazaba al recibir. Se
+     * listan todos los implicados y no se abre nada.
+     */
+    @Test
+    @DisplayName("crearSolicitud rechaza activos fuera de bodega personal antes de abrir el documento")
+    void crearSolicitud_RechazaActivosFueraDeBodegaPersonal() {
+        stubUsuarioDelToken();
+        stubSinComprometidos();
+
+        when(activoCompatibilidadRepository.buscarDatosDeCabecera(anyCollection(), eq("001")))
+                .thenReturn(List.of(
+                        activoEnBodega("ART-0012", "PL-771", "01", "F571", "FI"),
+                        activoEnBodega("ART-0034", "PL-802", "01", "F571", "FI"),
+                        activoCon("ART-0090", "PL-900", "01")));
+
+        ObjectResponse res = service.crearSolicitud(requestValido(
+                articulo("ART-0012", "PL-771"),
+                articulo("ART-0034", "PL-802"),
+                articulo("ART-0090", "PL-900")), BEARER);
+
+        assertEquals(CODE_ERROR, res.getCode());
+        assertTrue(res.getMsg().contains("bodega personal"), res.getMsg());
+        // Los dos implicados en el mismo mensaje, con su bodega; el que esta bien no.
+        assertTrue(res.getMsg().contains("placa PL-771) en la bodega F571 [FI]"), res.getMsg());
+        assertTrue(res.getMsg().contains("placa PL-802) en la bodega F571 [FI]"), res.getMsg());
+        assertFalse(res.getMsg().contains("PL-900"), res.getMsg());
+
+        verify(repository, never()).crearSolicitud(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(repository, never()).agregarArticulo(anyLong(), any(), any(), any());
+    }
+
+    /** Una bodega que no aparece en BODEGA no deja saber si el ERP la aceptara. */
+    @Test
+    @DisplayName("crearSolicitud rechaza un activo cuya bodega no tiene tipo")
+    void crearSolicitud_RechazaBodegaSinTipo() {
+        stubUsuarioDelToken();
+        stubSinComprometidos();
+
+        when(activoCompatibilidadRepository.buscarDatosDeCabecera(anyCollection(), eq("001")))
+                .thenReturn(List.of(activoEnBodega("ART-0012", "PL-771", "01", "X99", null)));
+
+        ObjectResponse res = service.crearSolicitud(requestValido(articulo("ART-0012", "PL-771")), BEARER);
+
+        assertEquals(CODE_ERROR, res.getCode());
+        assertTrue(res.getMsg().contains("en la bodega X99 [sin tipo]"), res.getMsg());
+        verify(repository, never()).crearSolicitud(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     /**
@@ -738,6 +800,36 @@ class TransferServiceImplTest {
         ObjectListResponse res = service.listarActivosDePersona("PER_FUENTE", "B01", null);
 
         assertFalse(((TransferAssetResponse) res.getList().get(0)).isEnTramite());
+    }
+
+    /**
+     * No se devuelve la lista para que el funcionario elija y choque al recibir:
+     * se dice por que esa bodega no sirve.
+     */
+    @Test
+    @DisplayName("listarActivosDePersona rechaza una bodega que no es personal")
+    void listarActivosDePersona_RechazaBodegaNoPersonal() {
+        when(bodegaJpaRepository.buscarTipo("F571", "001")).thenReturn("FI");
+
+        ObjectListResponse res = service.listarActivosDePersona("PER_FUENTE", "F571", "001");
+
+        assertEquals(CODE_ERROR, res.getCode());
+        assertTrue(res.getMsg().contains("F571") && res.getMsg().contains("[FI]"), res.getMsg());
+        assertTrue(res.getList().isEmpty());
+        verify(activoPersonaRepository, never()).buscarPorResponsable(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("listarActivosDePersona consulta normalmente una bodega personal")
+    void listarActivosDePersona_AceptaBodegaPersonal() {
+        when(bodegaJpaRepository.buscarTipo("2571", "001")).thenReturn("PE");
+        when(activoPersonaRepository.buscarPorResponsable("PER_FUENTE", "2571", "001"))
+                .thenReturn(List.of(activo("ART-0012", "PL-771", "CEIN_A", 0)));
+
+        ObjectListResponse res = service.listarActivosDePersona("PER_FUENTE", "2571", "001");
+
+        assertEquals(CODE_OK, res.getCode());
+        assertEquals(1, res.getList().size());
     }
 
     @Test

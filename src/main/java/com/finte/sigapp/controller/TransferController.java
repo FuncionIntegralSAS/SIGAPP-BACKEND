@@ -8,6 +8,7 @@ import com.finte.sigapp.dto.response.ObjectResponse;
 import com.finte.sigapp.exception.BussinessException;
 import com.finte.sigapp.service.TransferService;
 import com.finte.sigapp.utils.FirmaUtil;
+import com.finte.sigapp.utils.OracleErrorUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -47,9 +48,7 @@ public class TransferController {
         } catch (Exception e) {
 
             log.error("Error creando el traspaso: {}", e.getMessage(), e);
-            response.setCode(-1);
-            response.setMsg(MSG_ERROR + e.getMessage());
-            return ResponseEntity.status(500).body(response);
+            return error(response, e);
         }
     }
 
@@ -76,9 +75,7 @@ public class TransferController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Error listando los activos de la persona {}: {}", persona, e.getMessage(), e);
-            response.setCode(-1);
-            response.setMsg(MSG_ERROR + e.getMessage());
-            return ResponseEntity.status(500).body(response);
+            return error(response, e);
         }
     }
 
@@ -101,9 +98,7 @@ public class TransferController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Error listando las personas de la bodega {}: {}", bodega, e.getMessage(), e);
-            response.setCode(-1);
-            response.setMsg(MSG_ERROR + e.getMessage());
-            return ResponseEntity.status(500).body(response);
+            return error(response, e);
         }
     }
 
@@ -130,9 +125,7 @@ public class TransferController {
         } catch (Exception e) {
 
             log.error("Error listando traspasos: {}", e.getMessage(), e);
-            response.setCode(-1);
-            response.setMsg(MSG_ERROR + e.getMessage());
-            return ResponseEntity.status(500).body(response);
+            return error(response, e);
         }
     }
 
@@ -146,9 +139,7 @@ public class TransferController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Error consultando el traspaso {}: {}", numeroTramite, e.getMessage(), e);
-            response.setCode(-1);
-            response.setMsg(MSG_ERROR + e.getMessage());
-            return ResponseEntity.status(500).body(response);
+            return error(response, e);
         }
     }
 
@@ -169,9 +160,7 @@ public class TransferController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Error procesando el traspaso {}: {}", numeroTramite, e.getMessage(), e);
-            response.setCode(-1);
-            response.setMsg(MSG_ERROR + e.getMessage());
-            return ResponseEntity.status(500).body(response);
+            return error(response, e);
         }
     }
 
@@ -192,9 +181,7 @@ public class TransferController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Error registrando la firma del traspaso {}: {}", numeroTramite, e.getMessage(), e);
-            response.setCode(-1);
-            response.setMsg(MSG_ERROR + e.getMessage());
-            return ResponseEntity.status(500).body(response);
+            return error(response, e);
         }
     }
 
@@ -254,9 +241,27 @@ public class TransferController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("Error registrando la recepcion del traspaso {}: {}", numeroTramite, e.getMessage(), e);
-            response.setCode(-1);
-            response.setMsg(MSG_ERROR + e.getMessage());
-            return ResponseEntity.status(500).body(response);
+            return error(response, e);
         }
+    }
+
+    /**
+     * Respuesta de error comun.
+     *
+     * Usa OracleErrorUtil en vez del mensaje crudo porque los rechazos de este
+     * modulo vienen del paquete y del ERP con ORA-20008: "requiere la firma de
+     * ambas partes", "ya fue recibido". Sin extraerlo, el texto llegaba con la
+     * ubicacion de pkgerror, la pila ORA-06512 y el statement de Hikari.
+     */
+    private ResponseEntity<ObjectResponse> error(ObjectResponse response, Exception e) {
+        response.setCode(-1);
+        response.setMsg(MSG_ERROR + OracleErrorUtil.mensajeNegocio(e));
+        return ResponseEntity.status(500).body(response);
+    }
+
+    private ResponseEntity<ObjectListResponse> error(ObjectListResponse response, Exception e) {
+        response.setCode(-1);
+        response.setMsg(MSG_ERROR + OracleErrorUtil.mensajeNegocio(e));
+        return ResponseEntity.status(500).body(response);
     }
 }

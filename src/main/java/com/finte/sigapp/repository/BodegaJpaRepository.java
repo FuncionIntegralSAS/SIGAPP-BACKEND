@@ -32,4 +32,20 @@ public interface BodegaJpaRepository extends JpaRepository<BodegaEntity, BodegaP
       GROUP BY T.BODECODI, T.BODEEMPR, T.BODEDESC, T.BODEESTA
       """, nativeQuery = true)
   List<BodegaEntity> findBodegasConteoActivo(@Param("empresa") String empresa);
+
+  /**
+   * Tipo de una bodega (BODETIBO), o null si no existe.
+   *
+   * La empresa es opcional porque el selector de activos de traspasos tambien la
+   * trata asi. MAX solo sirve para devolver un escalar y null cuando no hay
+   * filas; comprobado el 2026-09-24, ningun codigo de bodega tiene tipos
+   * distintos entre empresas.
+   */
+  @Query(value = """
+      SELECT MAX(T.BODETIBO)
+        FROM BODEGA T
+       WHERE T.BODECODI = :bodega
+         AND (:empresa IS NULL OR T.BODEEMPR = :empresa)
+      """, nativeQuery = true)
+  String buscarTipo(@Param("bodega") String bodega, @Param("empresa") String empresa);
 }

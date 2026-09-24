@@ -40,6 +40,46 @@ class OracleErrorUtilTest {
         assertThat(OracleErrorUtil.mensajeNegocio(error)).isEqualTo("Faltan placas por asignar al articulo");
     }
 
+    /**
+     * Mensaje literal que devolvio recibir el traspaso 11 el 2026-09-24: la
+     * ubicacion de pkgerror delante, la pila en espanol, el enlace de ayuda de
+     * Oracle 23 y el statement de Hikari detras.
+     */
+    @Test
+    @DisplayName("quita la ubicacion de pkgerror, la pila y lo que anade el driver")
+    void quitaUbicacionDePkgerror() {
+        RuntimeException error = new RuntimeException(
+                "Error ejecutando PKG_FI_MOVITRAS.pro_recibir: Error calling CallableStatement.getMoreResults "
+                        + "[ORA-20008: package body SRFPNACUA.PKG_FI_MOVITRAS.PRO_RECIBIR.0      121 |"
+                        + "Bodega Destino [2612] o Bodega Fuente [F571] Deben ser de Tipo Personal\n"
+                        + "ORA-06512: en \"SRFPNACUA.PKG_FI_MOVITRAS\", línea 1215\n"
+                        + "ORA-06512: en línea 1\n\r\n"
+                        + "https://docs.oracle.com/error-help/db/ora-20008/] "
+                        + "[HikariProxyCallableStatement@934536653 wrapping "
+                        + "oracle.jdbc.driver.OracleCallableStatementWrapper@349984b1]");
+
+        assertThat(OracleErrorUtil.mensajeNegocio(error))
+                .isEqualTo("Bodega Destino [2612] o Bodega Fuente [F571] Deben ser de Tipo Personal");
+    }
+
+    @Test
+    @DisplayName("corta el enlace de ayuda aunque no le siga ningun ORA-")
+    void cortaEnlaceDeAyudaSinPila() {
+        RuntimeException error = new RuntimeException(
+                "[ORA-20008: procedure SRFPNACUA.PRO_X.0 7 |El traspaso [11] ya fue recibido\n"
+                        + "https://docs.oracle.com/error-help/db/ora-20008/] [HikariProxyCallableStatement@1]");
+
+        assertThat(OracleErrorUtil.mensajeNegocio(error)).isEqualTo("El traspaso [11] ya fue recibido");
+    }
+
+    @Test
+    @DisplayName("no toca un mensaje que solo contiene una barra vertical")
+    void conservaBarraQueNoEsUbicacion() {
+        RuntimeException error = new RuntimeException("ORA-20008: Centro A | Centro B no coinciden");
+
+        assertThat(OracleErrorUtil.mensajeNegocio(error)).isEqualTo("Centro A | Centro B no coinciden");
+    }
+
     @Test
     @DisplayName("devuelve el mensaje original cuando no hay codigo de negocio")
     void sinCodigoDevuelveElOriginal() {

@@ -27,13 +27,21 @@ public interface ActivoCompatibilidadRepository extends JpaRepository<ActivoComp
      *
      * La placa sale con NVL a punto para que la clave case con la que usa el
      * resto del modulo, donde el elemento sin placa se guarda como '.'.
+     *
+     * La bodega va con LEFT JOIN: un activo con una bodega que no esta en BODEGA
+     * sale con tipo nulo en vez de desaparecer, y asi el rechazo lo nombra.
      */
     @Query(value = """
             SELECT A.ACFIARTI,
                    NVL(A.ACFIPLAC,'.') AS ACFIPLAC,
                    A.ACFIOBSE,
-                   A.ACFICEIN
+                   A.ACFICEIN,
+                   A.ACFIBODE,
+                   B.BODETIBO
               FROM ACTIFIJO A
+              LEFT JOIN BODEGA B
+                ON B.BODECODI = A.ACFIBODE
+               AND B.BODEEMPR = A.ACFIBOEM
              WHERE A.ACFIARTI IN (:articulos)
                AND A.ACFIDIEM = :empresa
             """, nativeQuery = true)
