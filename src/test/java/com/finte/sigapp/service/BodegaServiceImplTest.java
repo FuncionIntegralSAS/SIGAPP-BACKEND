@@ -73,16 +73,16 @@ class BodegaServiceImplTest {
         mockEntity.setBodeEmpr("EMP01");
         mockEntity.setBodeCodi("BOD02");
         mockEntity.setBodeDesc("Bodega Norte");
-        mockEntity.setBodeEsta("AC");
+        mockEntity.setBodeEsta("ac");
 
-        when(bodegaJpaRepository.findByBodeEmpr("EMP01")).thenReturn(List.of(mockEntity));
+        when(bodegaJpaRepository.findByBodeEmprAndType("EMP01", "ac")).thenReturn(List.of(mockEntity));
 
-        List<BodegaDtoResponse> result = service.buscarTodas("EMP01");
+        List<BodegaDtoResponse> result = service.buscarTodas("EMP01", "ac");
 
         assertNotNull(result);
         assertEquals(1, result.size());
         assertEquals("BOD02", result.get(0).getBodeCodi());
         assertEquals("Bodega Norte", result.get(0).getBodeDesc());
-        assertEquals("AC", result.get(0).getBodeEsta());
+        assertEquals("ac", result.get(0).getBodeEsta());
     }
 }

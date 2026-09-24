@@ -5,8 +5,8 @@ CREATE OR REPLACE PACKAGE PKG_FI_REQUISICION AS
   COMPILAR EN EL ESQUEMA DE RECURSOS FISICOS SRF (SRFPNACUA), dueno de
   FI_REQUFIRM. Es ahi donde resuelven sin calificar las tablas del ERP que usa
   el paquete (REQUSUMI, MOVIRESU, ASPLMORS, EQUIVALE, PARAOPER, ARTICULO) y el
-  procedimiento PRO_GENERA_SALIREQU. Los demas esquemas lo alcanzan por
-  sinonimo, no con una copia propia.
+  paquete PKGFNMOVIRESU. Los demas esquemas lo alcanzan por sinonimo, no con una
+  copia propia.
 
   ESTE MODULO NO CREA LA REQUISICION
 
@@ -43,16 +43,27 @@ CREATE OR REPLACE PACKAGE PKG_FI_REQUISICION AS
 
   REGLA DE ORO: el documento de inventario se genera al REGISTRAR, nunca al
   entregar, y solo con las dos firmas presentes. Lo genera el ERP con
-  PRO_GENERA_SALIREQU -la logica de la forma PSSR-, que este paquete invoca. No
-  se reimplementa la salida.
+  PKGFNMOVIRESU.PROSALIDA, que este paquete invoca. No se reimplementa la
+  salida.
 
-  MORSCARE ES UNA ENTRADA DEL REGISTRO, NO UN RESULTADO
+  NO SE USA PRO_GENERA_SALIREQU
 
-  PRO_GENERA_SALIREQU lee MORSCARE y nunca la escribe: es la cantidad que lleva
-  a MOVIINVE, con la que calcula el costo, y si vale cero NO genera movimiento
-  para esa linea. Por eso pro_generar_salida sella la cantidad recibida ANTES de
-  llamarlo. Sin ese paso la linea pasaria a 'rg' sin mover inventario y sin que
-  nadie avise: en los datos historicos hay decenas de miles de lineas asi.
+  Es el otro camino del ERP para lo mismo -la logica de la forma PSSR- y tiene
+  un defecto comprobado el 2026-09-21: antes de decidir si inserta el movimiento
+  reasigna la cantidad con el saldo por concepto de SALDINLA, de modo que con
+  saldo cero genera el DOCUINVE, no genera ningun MOVIINVE y aun asi marca la
+  linea 'rg' -su UPDATE esta fuera del IF-. Requisicion registrada, inventario
+  intacto y ningun aviso. proSalida trae ese bloque comentado por el propio ERP
+  y ata el paso a 'rg' a que haya creado movimiento.
+
+  LA CANTIDAD QUE MUEVE INVENTARIO ES MORSCAEN
+
+  proSalida hace "MOINCANT := rg.MorsCaen" y no lee MORSCARE en ningun momento.
+  Por eso una recepcion parcial se aplica BAJANDO MORSCAEN antes de llamar al
+  ERP: asi sale del inventario lo que de verdad se recibio y el resto NO SALE de
+  la bodega. No es que algo lo devuelva -ARTIBODE.ARBOCAFI no se descuenta al
+  entregar sino al registrar, por la cantidad del movimiento-, simplemente nunca
+  llega a salir. MORSCARE queda como dato de auditoria, sellado a la par.
 
   EL USUARIO DE SESION ES OBLIGATORIO
 
@@ -88,7 +99,11 @@ CREATE OR REPLACE PACKAGE PKG_FI_REQUISICION AS
      optimizacion: sin esto el control de responsable de bodega del trigger
      TRGBUPR_MOVIRESU no puede identificar a nadie y deja pasar la operacion.
 
-     p_usuario es el codigo de persona (PERSONAL.PERSCODI) que sale del token.
+     p_usuario es el LOGIN de la persona (PERSONAL.PERSUSUA), que es lo que
+     lleva el token, no PERSONAL.PERSCODI. Es la columna contra la que compara
+     pkgPersonal.fun_Usuario, y pasarle el codigo numerico hace fallar TODA
+     llamada posterior del paquete con ORA-20008 "Usuario [X] no registrado":
+     pkgerror.proSetError valida el usuario de sesion en cada entrada.
    */
    PROCEDURE pro_set_contexto(p_usuario  IN VARCHAR2,
                               p_terminal IN VARCHAR2 DEFAULT 'SIGAPP');
@@ -212,10 +227,14 @@ CREATE OR REPLACE PACKAGE PKG_FI_REQUISICION AS
      Cierra el ciclo: genera la salida de inventario y deja las lineas en 'rg'.
 
      Exige las dos firmas y que todas las lineas esten en 'en' o 'ae', con al
-     menos una en 'en'. Completa con MORSCAEN las lineas cuya cantidad recibida
-     no se haya sellado, resuelve el tipo de documento de salida por
-     equivalencia y llama a PRO_GENERA_SALIREQU, que crea una cabecera en
-     DOCUINVE y una linea por articulo en MOVIINVE.
+     menos una en 'en'. Ajusta las cantidades de la recepcion parcial, resuelve
+     el tipo de documento de salida por equivalencia y llama a
+     PKGFNMOVIRESU.PROSALIDA, que crea una cabecera en DOCUINVE, una linea por
+     articulo en MOVIINVE y la contabilidad asociada.
+
+     Comprueba despues que el documento no haya salido vacio. OJO: proSalida
+     hace COMMIT propio cuando genera movimientos, asi que a partir de ese punto
+     no hay vuelta atras; toda validacion de este procedimiento va antes.
 
      Es reentrante: si la requisicion ya esta registrada devuelve el aviso y no
      vuelve a llamar al ERP. Esa comprobacion es lo que impide que un reintento

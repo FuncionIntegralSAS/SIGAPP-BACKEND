@@ -94,8 +94,14 @@ Todo error pasa por dos helpers privados del paquete:
 
 - `pro_log(mensaje)` → `pkgerrointe.procrear('FI_MOVITRAS', USER, SYSTIMESTAMP || ' ' || mensaje)`.
   Si el log falla (permisos, tabla ausente) se ignora: no puede tumbar el
-  trámite ni tapar el error real. Para que el registro sobreviva al rollback de
-  la app, `procrear` debe correr en transacción autónoma.
+  trámite ni tapar el error real. `procrear` corre en transacción autónoma con
+  `COMMIT` propio —comprobado en el fuente el 2026-09-21— así que el registro
+  sobrevive al rollback de la app.
+
+  Las filas caen en **`SRFPNACUA.ERROINTE`**, no en la `ERROINTE` a la que
+  apunta el sinónimo, y esa tabla **no tiene columna de fecha**. El detalle está
+  en `requisiciones/README.md`, sección «Dónde queda el log»; aplica igual a
+  este módulo cambiando el filtro a `ERININTE = 'FI_MOVITRAS'`.
 - `pro_error(mensaje)` → `pro_log` + `Pkgerror.proiniterrtxt`. Los dos hacen
   falta: el primero deja rastro para soporte, el segundo es el que lleva el texto
   al `RAISE_APPLICATION_ERROR(-20008, ...)` que termina viendo el backend.

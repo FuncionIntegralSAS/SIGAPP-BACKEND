@@ -4,7 +4,7 @@ create or replace package body pkg_fi_requisicion is
    -- COMPILAR EN EL ESQUEMA DE RECURSOS FISICOS SRF (SRFPNACUA), dueno de
    -- FI_REQUFIRM y del que dependen sin calificar las tablas del ERP que se usan
    -- aqui (REQUSUMI, MOVIRESU, ASPLMORS, EQUIVALE, PARAOPER, ARTICULO) y el
-   -- procedimiento PRO_GENERA_SALIREQU.
+   -- paquete PKGFNMOVIRESU.
    --
    -- INVARIANTES DEL MODULO
    --
@@ -23,9 +23,11 @@ create or replace package body pkg_fi_requisicion is
    --    SALDINLA y REQUSUMI. Este paquete no lo replica. Si un UPDATE parece
    --    demasiado simple, es por eso.
    --
-   -- 4. MORSCARE se sella ANTES de llamar al ERP, nunca despues:
-   --    PRO_GENERA_SALIREQU la lee como la cantidad que lleva a MOVIINVE y si
-   --    vale cero no genera movimiento para esa linea, sin avisar.
+   -- 4. La cantidad que mueve inventario es MORSCAEN. proSalida hace
+   --    "MOINCANT := rg.MorsCaen" y no lee MORSCARE nunca. Una recepcion
+   --    parcial se aplica BAJANDO MORSCAEN antes de llamar al ERP, y asi lo no
+   --    recibido no llega a salir: ARBOCAFI se descuenta al REGISTRAR, no al
+   --    entregar.
    -----------------------------------------------------------------------------
 
    -----------------------------------------------------------------------------
@@ -51,10 +53,6 @@ create or replace package body pkg_fi_requisicion is
    -----------------------------------------------------------------------------
    c_claseequiv    varchar2(4) := 'COBO';  -- EQUICLEQ
    c_tipoequiv     varchar2(4) := 'REQU';  -- EQUITIPO
-
-   -- Numeracion automatica del documento de salida (parametro sbTipoNume de
-   -- PRO_GENERA_SALIREQU). 'A' hace que el ERP tome el proximo del numerador.
-   c_numeauto      varchar2(1) := 'A';
 
    -- Posiciones de la firma en FI_REQUFIRM
    c_posisalida    number := 1;   -- quien entrega
@@ -806,8 +804,8 @@ create or replace package body pkg_fi_requisicion is
    -- pro_anular_linea
    --
    -- Solo se anula lo que aun no se ha entregado. Anular una linea con entrega
-   -- parcial la sacaria de 'en', y como PRO_GENERA_SALIREQU solo lee 'en', esa
-   -- entrega no llegaria nunca al inventario.
+   -- parcial la sacaria de 'en', y como proSalida solo lee 'en', esa entrega
+   -- no llegaria nunca al inventario.
    -----------------------------------------------------------------------------
    procedure pro_anular_linea (p_morstdem in moviresu.morstdem%type,
                                p_morstido in moviresu.morstido%type,
@@ -1086,12 +1084,32 @@ create or replace package body pkg_fi_requisicion is
    --
    -- SOBRE EL RE-RAISE DEL ORA-20008
    --
-   -- PRO_GENERA_SALIREQU llama a pkgerror.proseterror al entrar, asi que cuando
-   -- lanza su raise_application_error(-20008) y la excepcion sube hasta el WHEN
-   -- OTHERS de aqui, funnivelerror ya no vale 0 y se ejecuta la rama 'raise'.
-   -- El mensaje de negocio del ERP llega intacto al driver en vez de quedar
+   -- proSalida llama a pkgerror.proseterror al entrar, asi que cuando lanza su
+   -- raise_application_error(-20008) y la excepcion sube hasta el WHEN OTHERS
+   -- de aqui, funnivelerror ya no vale 0 y se ejecuta la rama 'raise'. El
+   -- mensaje de negocio del ERP llega intacto al driver en vez de quedar
    -- sepultado bajo un segundo -20008 generico. Si alguien sustituye este bloque
    -- por un raise_application_error plano, ese mensaje se pierde.
+   --
+   -- POR QUE proSalida Y NO PRO_GENERA_SALIREQU
+   --
+   -- Los dos generan la salida de una requisicion, pero PRO_GENERA_SALIREQU
+   -- tiene un defecto que se comprobo en la BD de desarrollo el 2026-09-21:
+   -- antes de decidir si inserta el movimiento reasigna la cantidad con el
+   -- saldo por concepto de SALDINLA. Con saldo cero -que es el estado de las
+   -- 99.387 filas de esa tabla en desarrollo- generaba el DOCUINVE, NO generaba
+   -- ningun MOVIINVE y aun asi marcaba la linea 'rg', porque su UPDATE esta
+   -- fuera del IF. Requisicion registrada, inventario intacto y ningun aviso.
+   --
+   -- proSalida trae ese bloque comentado por el propio ERP ("El traslado al
+   -- hacerse en la salida, solo debe consultar el saldo fisico del concepto"),
+   -- ata el paso a 'rg' a su bandera boCrea, genera la contabilidad con
+   -- pkgFnContabiliza, escribe por la capa Pkgtb* y filtra el numero con
+   -- BETWEEN en vez de LIKE. Es ademas la via que usa PKG_FAPI_REQUISICION, la
+   -- API de integracion del propio ERP.
+   --
+   -- A cambio hay que convivir con su COMMIT interno. Ver la nota en la
+   -- llamada.
    -----------------------------------------------------------------------------
    procedure pro_generar_salida (p_morstdem in  moviresu.morstdem%type,
                                  p_morstido in  moviresu.morstido%type,
@@ -1107,8 +1125,8 @@ create or replace package body pkg_fi_requisicion is
       in_pendi     number;
       in_entre     number;
       in_queda     number;
-      in_ajenas1   number;
-      in_ajenas2   number;
+      in_excede    number;
+      in_movi      number;
       sb_tidosali  varchar2(4);
       sb_estado    varchar2(2);
       sb_entrega   varchar2(2);
@@ -1192,9 +1210,57 @@ create or replace package body pkg_fi_requisicion is
          raise pkgerror.generic;
       end if;
 
-      -- Sellar la cantidad recibida de las lineas que no se recibieron
-      -- parciales. SIN ESTO la linea pasaria a 'rg' sin generar movimiento de
-      -- inventario: PRO_GENERA_SALIREQU salta las que tienen MORSCARE en cero.
+      -----------------------------------------------------------------------
+      -- La cantidad que mueve inventario es MORSCAEN, no MORSCARE.
+      --
+      -- proSalida hace "rgMovi.MOINCANT := rg.MorsCaen". MORSCARE no la lee
+      -- nunca: solo aparece dentro del texto de un mensaje de error del propio
+      -- ERP, que ademas valida MorsCaen y muestra MorsCare.
+      --
+      -- Por eso una recepcion parcial se aplica BAJANDO LA ENTREGADA, no
+      -- sellando la recibida como se hacia con PRO_GENERA_SALIREQU.
+      --
+      -- Con esto lo entregado y no recibido NO SALE de la bodega, que era un
+      -- pendiente conocido del modulo. El mecanismo no es que algo lo devuelva:
+      -- ARTIBODE.ARBOCAFI no se descuenta al entregar sino al REGISTRAR, por la
+      -- cantidad del movimiento. Comprobado el 2026-09-22 sobre 01-2609-202501249:
+      -- las lineas llevaban dias en 'en' y el saldo no se movio hasta el
+      -- registro. El trigger solo toca ARBOCASB, que va de MORSCASO y MORSCAAN.
+      --
+      -- Si la linea es devolutiva, ASPLMORS debe tener exactamente tantas
+      -- placas como la nueva MORSCAEN o el trigger rechaza el UPDATE con
+      -- 'Tiene una cantidad Diferente de placas a entregar'. Cuadra solo: al
+      -- recibir menos, ese mismo trigger ya obligo a soltar las sobrantes
+      -- contra MORSCARE, y aqui MORSCAEN baja justo a ese valor.
+      -----------------------------------------------------------------------
+      select count(1)
+        into in_excede
+        from moviresu
+       where morstdem = p_morstdem
+         and morstido = p_morstido
+         and morsrenu = p_morsrenu
+         and morsesta = sb_entrega
+         and nvl(morscare, 0) > nvl(morscaen, 0);
+
+      if (in_excede > 0) then
+         pro_error('La requisicion [' || p_morstdem || '-' || p_morstido || '-' || p_morsrenu ||
+                   '] tiene ' || in_excede || ' linea(s) con cantidad recibida mayor que la ' ||
+                   'entregada. No se puede registrar');
+         raise pkgerror.generic;
+      end if;
+
+      -- Recepcion parcial: la entregada baja a lo recibido.
+      update moviresu
+         set morscaen = morscare
+       where morstdem = p_morstdem
+         and morstido = p_morstido
+         and morsrenu = p_morsrenu
+         and morsesta = sb_entrega
+         and nvl(morscare, 0) > 0
+         and nvl(morscare, 0) < nvl(morscaen, 0);
+
+      -- Recepcion total (la recibida no se toco): se sella para que la columna
+      -- de auditoria no quede en cero contradiciendo al movimiento generado.
       update moviresu
          set morscare = morscaen
        where morstdem = p_morstdem
@@ -1205,26 +1271,61 @@ create or replace package body pkg_fi_requisicion is
 
       sb_tidosali := fun_tipo_salida(p_morstido);
 
-      -- Testigo del LIKE. El cursor de PRO_GENERA_SALIREQU filtra
-      -- "morsrenu LIKE sbMoReNume", asi que un comodin barreria lineas de otras
-      -- requisiciones. Se cuenta antes y despues para detectarlo.
-      select count(1)
-        into in_ajenas1
-        from moviresu
-       where morsesta = sb_entrega
-         and not (morstdem = p_morstdem and morstido = p_morstido and morsrenu = p_morsrenu);
+      -----------------------------------------------------------------------
+      -- El tipo de documento sigue viajando por LIKE.
+      --
+      -- proSalida filtra el NUMERO con BETWEEN -adios al comodin que si tenia
+      -- PRO_GENERA_SALIREQU-, pero su cursor conserva "ResuTido LIKE P_sbTido".
+      -- El tipo llega como String desde la API, asi que un '26%' barreria los
+      -- demas tipos de requisicion. Se corta aqui.
+      -----------------------------------------------------------------------
+      if (translate(p_morstido, 'x%_', 'x') != p_morstido) then
+         pro_error('El tipo de documento [' || p_morstido || '] contiene comodines');
+         raise pkgerror.generic;
+      end if;
 
-      -- El numero se toma del ROWTYPE leido bajo bloqueo, nunca del parametro
-      -- de entrada: asi lo que viaja al ERP es siempre un NUMBER de la propia
-      -- base y no puede contener un comodin.
-      pro_genera_salirequ(sbmoreempr => p_morstdem,
-                          sbtidosare => sb_tidosali,
-                          sbmorenume => to_char(rg_cabecera.resunume),
-                          sbtiponume => c_numeauto,
-                          sbtext     => sb_text,
-                          dtfecha    => sysdate,
-                          nusigunume => 0,
-                          sbtidoreqi => p_morstido);
+      -- RESUSAME decide si la salida es traslado ('T') o no ('N'/'S'), y el
+      -- cursor de proSalida exige que coincida. Si no casa NO HACE NADA, sin
+      -- error: ni documento, ni movimiento, ni aviso. Con el valor nulo pasaria
+      -- exactamente eso, asi que se corta antes.
+      if (rg_cabecera.resusame is null) then
+         pro_error('La requisicion [' || p_morstdem || '-' || p_morstido || '-' || p_morsrenu ||
+                   '] no tiene RESUSAME y el ERP no puede resolver el tipo de salida');
+         raise pkgerror.generic;
+      end if;
+
+      -----------------------------------------------------------------------
+      -- pkgfnmoviresu.proSalida, y no PRO_GENERA_SALIREQU.
+      --
+      -- Aquel pisaba la cantidad con el saldo por concepto de SALDINLA
+      -- ("rg_moviresu_Ins.morscare := nuSaldoR") justo antes de decidir si
+      -- insertaba, de modo que con saldo cero generaba el DOCUINVE, no generaba
+      -- ningun MOVIINVE y aun asi marcaba la linea 'rg'. proSalida trae ese
+      -- bloque COMENTADO por el propio ERP y ata el paso a 'rg' a su bandera
+      -- boCrea: sin movimiento, la linea se queda en 'en'.
+      --
+      -- El numero se toma del ROWTYPE leido bajo bloqueo, nunca del parametro,
+      -- y va en los dos extremos del rango: una requisicion, no un intervalo.
+      --
+      -- La fecha es SYSDATE y no RESUFECH: el documento lo fecha el dia en que
+      -- se registra. proSalida toma periodo y lapso de PERIACTU/LAPSACTU, asi
+      -- que una fecha vieja dejaria el documento incoherente con su periodo.
+      --
+      -- OJO: proSalida hace COMMIT propio cuando genera movimientos, y ROLLBACK
+      -- en sus manejadores. El COMMIT solo dispara dentro de su IF (boCrea),
+      -- o sea cuando ya cruzo el punto de no retorno; si no genera nada no
+      -- commitea y este rollback sigue limpiando. Por eso TODA validacion de
+      -- este procedimiento esta ANTES de esta llamada: despues ya no se puede
+      -- deshacer nada.
+      -----------------------------------------------------------------------
+      pkgfnmoviresu.prosalida(p_sbempr => p_morstdem,
+                              p_sbtido => p_morstido,
+                              p_innume => rg_cabecera.resunume,
+                              p_innufi => rg_cabecera.resunume,
+                              p_dtdate => sysdate,
+                              p_sbtisa => sb_tidosali,
+                              p_sbtitr => rg_cabecera.resusame,
+                              p_sbtext => sb_text);
 
       -- Poscondicion: no puede quedar ninguna linea sin registrar.
       select count(1)
@@ -1237,19 +1338,34 @@ create or replace package body pkg_fi_requisicion is
 
       if (in_queda > 0) then
          pro_error('El ERP no registro ' || in_queda || ' linea(s) de la requisicion [' ||
-                   p_morstdem || '-' || p_morstido || '-' || p_morsrenu || ']: ' || sb_text);
+                   p_morstdem || '-' || p_morstido || '-' || p_morsrenu || ']. Revisar el ' ||
+                   'saldo del articulo en ARTIBODE y la configuracion contable: ' || sb_text);
          raise pkgerror.generic;
       end if;
 
+      -- Poscondicion del movimiento. La linea en 'rg' ya implica que proSalida
+      -- creo el movimiento -es su bandera boCrea la que gobierna el UPDATE-,
+      -- pero se comprueba igual sobre MOVIINVE: es la unica forma de detectar
+      -- que el documento salio vacio, que es exactamente lo que pasaba antes y
+      -- nadie veia. El documento se localiza por la requisicion que lo origino.
       select count(1)
-        into in_ajenas2
-        from moviresu
-       where morsesta = sb_entrega
-         and not (morstdem = p_morstdem and morstido = p_morstido and morsrenu = p_morsrenu);
+        into in_movi
+        from moviinve m
+       where exists (select 1
+                       from docuinve d
+                      where d.dointdem = m.moininem
+                        and d.dointido = m.moinintd
+                        and d.doinnume = m.moininnu
+                        and d.dointdem = p_morstdem
+                        and d.dointido = sb_tidosali
+                        and d.doindoem = p_morstdem
+                        and d.doindocu = p_morstido
+                        and d.doindonu = to_char(rg_cabecera.resunume));
 
-      if (in_ajenas2 < in_ajenas1) then
-         pro_error('PRO_GENERA_SALIREQU afecto ' || (in_ajenas1 - in_ajenas2) ||
-                   ' linea(s) de otras requisiciones. Se aborta la operacion');
+      if (in_movi = 0) then
+         pro_error('El ERP genero el documento de salida pero ningun movimiento de ' ||
+                   'inventario para la requisicion [' || p_morstdem || '-' || p_morstido ||
+                   '-' || p_morsrenu || ']: ' || sb_text);
          raise pkgerror.generic;
       end if;
 

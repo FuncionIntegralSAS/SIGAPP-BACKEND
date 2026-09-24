@@ -42,7 +42,7 @@ hizo nada. Verificar siempre después.
 ## Por qué en `SRFPNACUA` y no en otro esquema
 
 El paquete referencia sin calificar `REQUSUMI`, `MOVIRESU`, `ASPLMORS`, `EQUIVALE`,
-`PARAOPER` y el procedimiento `PRO_GENERA_SALIREQU`. Todos resuelven en el esquema de
+`PARAOPER` y el paquete `PKGFNMOVIRESU`. Todos resuelven en el esquema de
 recursos físicos. Compilarlo en otro sitio da `ORA-00942` aunque existan los sinónimos,
 porque un sinónimo resuelve el nombre pero no concede el acceso.
 
@@ -54,10 +54,9 @@ Objetos que ya deben existir. Ninguno se modifica.
 
 **Tablas:** `REQUSUMI`, `MOVIRESU`, `ASPLMORS`, `EQUIVALE`, `PARAOPER`, `TIPODOCU`.
 
-**Procedimiento:** `PRO_GENERA_SALIREQU` — es la lógica de la forma PSSR y la que genera el
-documento de salida. El módulo lo invoca, no lo reimplementa.
-
-**Paquetes:** `pkgerror`, `pkgerrointe`, `pkgfnPersonal`. Y la función `funBuscPara`.
+**Paquetes:** `pkgerror`, `pkgerrointe`, `pkgfnPersonal` y **`pkgfnmoviresu`**, cuyo
+`proSalida` genera el documento de salida. El módulo lo invoca, no lo reimplementa.
+Y la función `funBuscPara`.
 
 **Parámetros que se leen** (todos existen ya): `ESTAINIC` = `in`, `ESTAAPRO` = `ap`,
 `ESTAENTR` = `en`, `ESTAANEN` = `ae`, `ESTAREGI` = `rg`, `ESTAACTI` = `ac`.
@@ -134,15 +133,82 @@ SELECT COUNT(*) FROM FI_REQUFIRM;
 
 ---
 
+## Dónde queda el log, y por qué parece que no queda
+
+⚠️ **Hay dos tablas `ERROINTE` y el sinónimo apunta a la que no es.** Verificado sobre la
+BD de desarrollo el 2026-09-21:
+
+| Objeto | Qué es |
+|---|---|
+| `SRFPNACUA.ERROINTE` | **Aquí escribe este módulo.** ~640.000 filas |
+| `FPLPNACUA.ERROINTE` | Otra cosa, del comercial. ~750 filas |
+| `ARQGUIPNACUA.ERROINTE` | **Sinónimo hacia `FPLPNACUA`**, la equivocada |
+
+El paquete resuelve `pkgerrointe` contra `SRFPNACUA.PKGERROINTE` porque se compila en ese
+esquema y el objeto propio gana sobre el sinónimo. Consultar `errointe` sin calificar desde
+otro usuario mira otra tabla y no encuentra nada. **Calificar siempre el esquema.**
+
+⚠️ **`SRFPNACUA.ERROINTE` no tiene columna de fecha**: solo `ERININTE`, `ERINUSUA` y
+`ERINERRO` (`VARCHAR2(2000)`). La de `FPLPNACUA` sí tiene `ERINFESI`, de ahí la confusión.
+Por eso `pro_log` antepone `SYSTIMESTAMP` al mensaje **como texto**, y por eso no se puede
+ordenar cronológicamente. Ordenar por `ROWID` no es un sustituto: devuelve filas de hace
+meses.
+
+```sql
+SELECT erininte, erinusua, erinerro
+  FROM srfpnacua.errointe
+ WHERE erininte = 'FI_REQUFIRM';     -- traspasos usa 'FI_MOVITRAS'
+```
+
+`ERINUSUA` es el usuario **Oracle** (`SRFPNACUA`), nunca el código de persona del token:
+ese va dentro del texto del mensaje.
+
+✅ **`pkgerrointe.procrear` es autónomo y hace su propio `COMMIT`** en los dos esquemas. Era
+un supuesto del diseño y ahora está comprobado en el fuente: el log sobrevive al rollback de
+la operación, que es justo lo que se necesita para soporte.
+
+El script `docs/registrar-requisicion-diagnostico.sql` trae todo esto resuelto.
+
+---
+
 ## Notas de diseño que no se ven en el DDL
 
 **La cabecera nunca se toca.** `REQUSUMI.RESUESTA` se queda en `ac` siempre. El estado de la
 requisición es una función de sus líneas (`fun_estado`), no una columna.
 
-**`MORSCARE` es una entrada del registro, no un resultado.** `PRO_GENERA_SALIREQU` la lee
-como la cantidad que lleva a `MOVIINVE` y **si vale cero no genera movimiento** para esa
-línea, sin avisar. Por eso el paquete la sella antes de llamarlo. En los datos históricos
-hay unas 33 000 líneas en `rg` con la cantidad recibida en cero: son exactamente ese caso.
+**La cantidad que mueve inventario es `MORSCAEN`.** `proSalida` hace
+`MOINCANT := rg.MorsCaen` y no lee `MORSCARE` en ningún momento. Por eso una recepción
+parcial se aplica **bajando la entregada** antes de llamar al ERP: sale del inventario lo
+que de verdad se recibió y el resto **no llega a salir**. `MORSCARE` queda como dato de
+auditoría, sellado a la par.
+
+⚠️ No es que nada lo devuelva. **`ARTIBODE.ARBOCAFI` se descuenta al REGISTRAR, no al
+entregar**, por la cantidad del movimiento — comprobado el 2026-09-22 sobre
+`01-2609-202501249`: las líneas llevaban días en `en` y el saldo no se movió hasta el
+registro. El trigger solo toca `ARBOCASB`, que va de `MORSCASO` y `MORSCAAN`.
+
+**Por qué no `PRO_GENERA_SALIREQU`.** Es el otro camino del ERP para lo mismo —la lógica
+de la forma PSSR— y tiene un defecto comprobado sobre la BD el 2026-09-21: antes de decidir
+si inserta el movimiento reasigna la cantidad con el saldo por concepto de `SALDINLA`
+(`rg_moviresu_Ins.morscare := nuSaldoR`). Con saldo cero genera el `DOCUINVE`, no genera
+ningún `MOVIINVE` y **aun así marca la línea `rg`**, porque su `UPDATE` está fuera del
+`IF`. Requisición registrada, inventario intacto y ningún aviso. En desarrollo las 99 387
+filas de `SALDINLA` tienen `SAILCASF = 0`, así que ahí no movía nada nunca.
+
+`proSalida` trae ese bloque **comentado por el propio ERP** —*"El traslado al hacerse en la
+salida, solo debe consultar el saldo fisico del concepto"*—, ata el paso a `rg` a su
+bandera `boCrea`, genera la contabilidad con `pkgFnContabiliza`, escribe por la capa
+`Pkgtb*` y filtra el número con `BETWEEN` en vez de `LIKE`. Es además la vía que usa
+`PKG_FAPI_REQUISICION`, la API de integración del propio ERP.
+
+⚠️ **`proSalida` hace `COMMIT` propio** cuando genera movimientos, y `ROLLBACK` en sus
+manejadores. El `COMMIT` solo dispara dentro de su `IF (boCrea)`, es decir cuando ya cruzó
+el punto de no retorno; si no genera nada no commitea y el rollback sigue limpiando. Por eso
+**toda validación de `pro_generar_salida` va antes de la llamada**.
+
+⚠️ **`P_sbTitr` tiene que ser `REQUSUMI.RESUSAME`** (`T` traslado, `N`/`S` no). Su cursor
+exige que coincida y si no casa **no hace nada, sin error**: ni documento, ni movimiento, ni
+aviso. Con el valor nulo pasaría lo mismo, así que el paquete corta antes.
 
 **El usuario de sesión es obligatorio.** El parámetro `CONREBEQ` está activo, así que el
 trigger `TRGBUPR_MOVIRESU` comprueba que quien entrega o registra sea responsable de la

@@ -578,8 +578,8 @@ sección resume lo que es fácil de romper sin darse cuenta.
 ## Lo que este módulo NO hace
 
 **No crea la requisición.** Nace en el ERP en estado `in` y SIGAPP solo la hace avanzar.
-**No genera el documento de inventario por su cuenta**: lo hace `PRO_GENERA_SALIREQU`, el
-procedimiento del ERP que está detrás de la forma PSSR. Y **no toca la cabecera**:
+**No genera el documento de inventario por su cuenta**: lo hace `PKGFNMOVIRESU.PROSALIDA`,
+el procedimiento del ERP. Y **no toca la cabecera**:
 `REQUSUMI.RESUESTA` se queda en `ac` siempre.
 
 Esta es la diferencia de fondo con traspasos, donde el documento lo armaba nuestro paquete.
@@ -619,12 +619,33 @@ sola y una conexión reciclada conserva el valor anterior. Si queda nula, un `NV
 trigger la iguala al responsable de la bodega y **el control se salta en silencio**. Hay un
 test que verifica el orden de las llamadas, y está ahí por esto.
 
-⚠️ **`MORSCARE` es una ENTRADA del registro, no un resultado.** `PRO_GENERA_SALIREQU` la
-lee como la cantidad que lleva a `MOVIINVE`, con ella calcula el costo y **si vale cero no
-genera movimiento para esa línea**. Nunca la escribe: lo único que escribe en `MOVIRESU` es
-`MORSESTA = rg`. Por eso `pro_generar_salida` la sella justo antes de llamarlo. Sin ese
-paso la línea pasa a `rg` sin mover inventario y nadie avisa — de las 101 313 líneas
-históricas en `rg`, unas 33 400 están así.
+⚠️ **El usuario es el login (`PERSONAL.PERSUSUA`), no `PERSCODI`.** Es lo que lleva el
+token y lo que compara `pkgPersonal.fun_Usuario`. Pasar el código numérico hace fallar
+**toda** llamada posterior del paquete con `ORA-20008: Usuario [X] no registrado`, porque
+`pkgerror.proSetError` valida el usuario de sesión en cada entrada — y el error aparece en
+el procedimiento siguiente, no en `pro_set_contexto`, que es donde se miraría primero.
+Además el trigger exige que ese login sea **el responsable de la bodega**: para `F693` es
+`marana`, para `F11` es `otapias`.
+
+⚠️ **La cantidad que mueve inventario es `MORSCAEN`, no `MORSCARE`.** `proSalida` hace
+`MOINCANT := rg.MorsCaen` y no lee `MORSCARE` en ningún momento. Por eso una recepción
+parcial se aplica **bajando la entregada** antes de llamar al ERP: sale lo que de verdad se
+recibió y el resto **no llega a salir de la bodega**. No es que nada lo devuelva —
+`ARBOCAFI` se descuenta al **registrar**, no al entregar, y el trigger solo toca
+`ARBOCASB`, que va de `MORSCASO` y `MORSCAAN`. `MORSCARE` queda como auditoría.
+
+⚠️ **No se usa `PRO_GENERA_SALIREQU`**, el otro camino del ERP para lo mismo. Comprobado
+sobre la BD el 2026-09-21: antes de decidir si inserta el movimiento reasigna la cantidad
+con el saldo por concepto de `SALDINLA`, de modo que con saldo cero genera el `DOCUINVE`,
+no genera ningún `MOVIINVE` y **aun así marca la línea `rg`** —su `UPDATE` está fuera del
+`IF`—. Requisición registrada, inventario intacto y ningún aviso. `proSalida` trae ese
+bloque comentado por el propio ERP, ata el paso a `rg` a que haya creado movimiento, genera
+la contabilidad y es la vía que usa `PKG_FAPI_REQUISICION`, la API del propio ERP.
+
+⚠️ **`proSalida` hace `COMMIT` propio** al generar movimientos, y `ROLLBACK` en sus
+manejadores. Solo dispara cuando ya cruzó el punto de no retorno, pero obliga a que **toda
+validación de `pro_generar_salida` vaya antes de la llamada**. Y su cursor exige
+`RESUSAME = P_sbTitr`: si no casa **no hace nada, sin error**.
 
 🔒 **El documento de salida se genera al REGISTRAR, nunca al entregar**, y solo con las dos
 firmas. Misma regla de oro que en traspasos.
@@ -707,8 +728,10 @@ controller los traduce después de que Spring haya revertido.
 ## Contrato de la API
 
 `{empresa}/{tipo}/{numero}` es la terna. `numero` se declara `Long` por seguridad, no solo
-por tipado: `PRO_GENERA_SALIREQU` filtra las líneas con `LIKE` sobre ese valor, así que un
-comodín barrería otras requisiciones. Exigir un entero lo hace imposible desde la API.
+por tipado: el cursor del ERP filtraba las líneas con `LIKE` sobre ese valor, así que un
+comodín barrería otras requisiciones. `proSalida` ya usa `BETWEEN` para el número, pero
+conserva el `LIKE` para el **tipo**, que el paquete valida aparte. Exigir un entero lo hace
+imposible desde la API.
 
 | Endpoint | Devuelve |
 |---|---|
@@ -734,6 +757,12 @@ sería irreversible.
 - **Quién entregó y quién anuló no se guarda en el ERP.** `MOVIRESU` solo tiene
   `MORSUSAP` para el aprobador y añadir una columna exigiría modificar una tabla del
   sistema financiero. Va al log vía `pro_log`.
-- **Recepción parcial:** lo entregado y no recibido no vuelve al inventario ni queda como
-  anulado. Es la consecuencia aceptada de permitir recibir menos; conviene que el área
-  funcional lo tenga presente.
+- **Artículos con serial: sin cubrir.** `FPLPNACUA.FI_SERIARTI` y `PKGFNFI_SERIARTI` son de
+  otro equipo y se enganchan a la salida: si el artículo lleva control de serial y la línea
+  no tiene seriales asignados, el registro muere con
+  `ORA-20030: El serial  no se encuentra en la bodega`. Son **6 artículos** en toda la base
+  al 2026-09-22, pero el módulo no los contempla ni los detecta antes de tiempo. Si hace
+  falta, hay que hablarlo con ese equipo y añadir la asignación, como se hizo con las placas.
+- ~~**Recepción parcial:** lo entregado y no recibido no vuelve al inventario.~~ **Resuelto
+  el 2026-09-22** al pasar a `proSalida`: como la cantidad la gobierna `MORSCAEN`, el
+  registro la baja a lo recibido y lo demás nunca sale de la bodega.

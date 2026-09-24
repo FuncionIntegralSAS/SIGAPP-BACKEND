@@ -26,11 +26,12 @@ import java.time.LocalDate;
  *                -> ae          anulado al entregar
  * </pre>
  *
- * Las cinco cantidades no son intercambiables. {@code morscare} merece atencion
- * especial: es la que el ERP lleva al movimiento de inventario al registrar, de
- * modo que una linea que llegue a {@code rg} con ese valor en cero pasa de
- * estado pero no mueve inventario. Por eso la sella el paquete antes de generar
- * la salida.
+ * Las cinco cantidades no son intercambiables. La que mueve inventario es
+ * {@code morscaen}: es la que {@code PKGFNMOVIRESU.PROSALIDA} lleva al
+ * movimiento al registrar. {@code morscare} no la lee el ERP en ningun momento,
+ * asi que una recepcion parcial se aplica bajando la entregada antes de generar
+ * la salida: lo no recibido no llega a salir, porque ARTIBODE.ARBOCAFI se
+ * descuenta al registrar y no al entregar.
  *
  * SOLO LECTURA. Toda escritura pasa por PKG_FI_REQUISICION: los UPDATE sobre
  * esta tabla disparan un trigger del ERP que valida disponibilidad, placas y
@@ -94,7 +95,7 @@ public class MoviresuEntity {
     private BigDecimal morscaan; // Cantidad anulada
 
     @Column(name = "MORSCARE")
-    private BigDecimal morscare; // Cantidad recibida. La que el ERP lleva a MOVIINVE
+    private BigDecimal morscare; // Cantidad recibida. Auditoria: el ERP no la lee
 
     @Column(name = "MORSCAPE")
     private BigDecimal morscape; // Cantidad pendiente
