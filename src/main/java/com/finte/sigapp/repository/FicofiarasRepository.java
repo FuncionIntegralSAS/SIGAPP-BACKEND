@@ -34,7 +34,7 @@ public interface FicofiarasRepository extends JpaRepository<FicofiarasEntity, Lo
              ARASFEC2, ARASFEC3, ARASSIN2, ARASSIN3,
              ARASFES2, ARASFES3, AR.ARTIDESC
        FROM FI_COFIARAS FI
-       JOIN ARTICULO AR ON AR.ARTICODI = FI.ARASIDAR
+       JOIN SRF_ARTICULO AR ON AR.ARTICODI = FI.ARASIDAR
       WHERE ARASESTA = 'pe'
         AND ARASIDUS = :idUsuario
          """, nativeQuery = true)

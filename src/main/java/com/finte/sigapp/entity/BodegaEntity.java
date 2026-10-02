@@ -9,7 +9,7 @@ import lombok.AllArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "BODEGA")
+@Table(name = "SRF_BODEGA")
 @IdClass(BodegaPK.class)
 public class BodegaEntity {
 

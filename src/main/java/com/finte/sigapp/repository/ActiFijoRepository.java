@@ -13,7 +13,7 @@ public interface ActiFijoRepository extends JpaRepository<ActiFijoModel, Long> {
 
   @Query(value = """
       SELECT *
-       FROM actifijo
+       FROM SRF_ACTIFIJO
       WHERE ACFIPERS = :responsable
         AND ACFIESTA = 'ac'
         AND (:bodega IS NULL OR ACFIBODE = :bodega)
@@ -24,7 +24,7 @@ public interface ActiFijoRepository extends JpaRepository<ActiFijoModel, Long> {
   @Query(value = """
       SELECT DISTINCT ACFIARTI,
                       ACFIOBSE
-      FROM actifijo
+      FROM SRF_ACTIFIJO
       WHERE ACFIESTA = 'ac'
         AND ACFIBODE = :bodega
         AND ACFIBOEM = :empresa

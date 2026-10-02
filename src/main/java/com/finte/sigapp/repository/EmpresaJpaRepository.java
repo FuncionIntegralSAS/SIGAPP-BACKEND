@@ -12,6 +12,6 @@ public interface EmpresaJpaRepository extends JpaRepository<EmpresaEntity, Strin
 
     @Query(value = """
         SELECT T.EMPRCODI, T.EMPRDESC, T.EMPRNIT, T.EMPRESTA 
-        FROM empresa T""", nativeQuery = true)
+        FROM SRF_EMPRESA T""", nativeQuery = true)
     List<EmpresaEntity> buscarTodas();
 }

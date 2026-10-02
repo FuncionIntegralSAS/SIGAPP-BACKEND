@@ -54,9 +54,9 @@ public interface RequisicionBandejaRepository extends JpaRepository<RequisicionB
                        MIN(M.MORSFECH) AS FECHA,
                        MIN(M.MORSBODE) AS BODEGA,
                        COUNT(1)        AS LINEAS
-                  FROM MOVIRESU M
+                  FROM SRF_MOVIRESU M
                  WHERE EXISTS (SELECT 1
-                                 FROM EQUIVALE E
+                                 FROM SRF_EQUIVALE E
                                 WHERE E.EQUICLEQ = 'COBO'
                                   AND E.EQUITIPO = 'REQU'
                                   AND E.EQUICODI = M.MORSTIDO
