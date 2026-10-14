@@ -14,7 +14,7 @@ public interface PersonalRepository extends JpaRepository<PersonalModel, Long> {
 
     @Query(value = """
             SELECT PERSCODI, PERSNOMB, PERSAPEL, PERSCOEL, PERSDIVI, PERSESTA
-              FROM PERSONAL
+              FROM SRF_PERSONAL
              WHERE PERSESTA = 'ac'
                 AND (:nombre IS NULL OR UPPER(PERSNOMB) LIKE UPPER(:nombre))
                 AND (:apellido IS NULL OR UPPER(PERSAPEL) LIKE UPPER(:apellido))
@@ -39,8 +39,8 @@ public interface PersonalRepository extends JpaRepository<PersonalModel, Long> {
      */
     @Query(value = """
             SELECT P.PERSCODI, P.PERSNOMB, P.PERSAPEL, P.PERSCOEL, P.PERSDIVI, P.PERSESTA
-              FROM PERSONAL P
-              JOIN BODEGA B
+              FROM SRF_PERSONAL P
+              JOIN SRF_BODEGA B
                 ON B.BODEDIVI = P.PERSDIVI
              WHERE B.BODECODI = :bodega
                AND B.BODEEMPR = :empresa

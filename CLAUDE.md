@@ -171,6 +171,29 @@ Las siguientes tablas pertenecen al ERP existente y **NO deben modificarse**:
 - `BODEGA` - Catálogo de bodegas
 - `DOCUINVE` - Documentos de inventario
 
+### Usuario de conexión y nombres de las tablas
+
+🔒 **El backend se conecta como el usuario de interfaz del ERP, `ARQGUI<empresa>`
+(`ARQGUIPNACUA` en dev), no como el dueño `SRF<empresa>`.** Decisión del 2026-10-02. Ese
+usuario ve dos esquemas con nombres que chocan, y lo resuelve así:
+
+| En la consulta Java se escribe | Llega a |
+|---|---|
+| `SRF_<tabla>` (`SRF_BODEGA`, `SRF_REQUSUMI`, `SRF_PARAOPER`, `SRF_PKGCONTARBO`) | La tabla o paquete del esquema SRF |
+| `FPL_ROLEFORM` | `ROLEFORM` del FPL, por sinónimo público. Es lo único que se lee del FPL |
+| `FI_*`, `SEQ_COFI*`, `PKG_FI_*` | Objetos propios del SRF, por sinónimo creado en los scripts de cada módulo |
+
+⚠️ **Nunca escribir `BODEGA`, `PARAOPER`, `EQUIVALE`, `PERSONAL`, `EMPRESA`, `TIPODOCU` o
+`USUABADA` a secas.** Para `ARQGUI` unas no existen (`ORA-00942`) y las otras **apuntan a la
+tabla del FPL**, que tiene otros datos: la consulta funciona y devuelve lo que no es.
+`PERSONAL` del SRF tiene 785 filas y la del FPL 603; `EQUIVALE` del FPL no tiene la
+equivalencia `COBO/REQU`. Aplica a `@Table`, a las consultas nativas y a los nombres de
+paquete que se pasan a `ProcedureExecutor`.
+
+Cada objeto nuevo que use el backend se añade a
+`src/main/resources/db/validacion/VALIDAR_ACCESO_USUARIO_BD.sql`, que ejecutado como el
+usuario de interfaz dice si lo ve, a qué llega y qué permisos le faltan. Es de solo lectura.
+
 ### Convención de columnas:
 
 **Máximo 8 caracteres por nombre de columna** (limitación Oracle legacy)
@@ -385,6 +408,29 @@ El proyecto debe mantenerse lo más independiente posible del sistema financiero
 - Testing
 - Evolución independiente
 - Migración futura si es necesario
+
+---
+
+# Configuración dinámica de la app móvil
+
+La app es **un único APK** para todos los ambientes: lee de un QR la URL del backend y la
+valida contra `GET /api/v1/health/info` (público), que responde `app` y `urlPublica`.
+Detalle y texto del minutograma en `src/main/resources/db/configuracion/README.md`.
+
+- **`urlPublica` sale de `PARAOPER` (`URLSIGAPP`)**, sin caché: un `UPDATE` tiene efecto
+  inmediato. ⚠️ **Es distinta en cada ambiente**; el script se niega a insertar si no se
+  edita y no sobreescribe un valor existente.
+- **Toda la configuración va en la base, nada en el despliegue.** Decisión del equipo: un
+  cambio no debe exigir redesplegar, reiniciar el pod ni esperar a infraestructura. No
+  añadir variables de entorno para esto.
+- ⚠️ **Una base clonada de otro ambiente trae la URL de ese ambiente** y nada lo detecta.
+  Corregir `URLSIGAPP` es un paso obligatorio después de clonar o refrescar una base.
+- **Se lee la tabla, no `FunBuscPara`**: la función depende del usuario y la empresa de la
+  sesión Oracle, y este endpoint se llama sin token. Hay dos `PARAOPER` (SRF y FPL); la
+  consulta ve la del usuario de la conexión.
+- **`GET /api/v1/health` no se toca**: devuelve el texto `OK` y ya se consume así.
+- **La lista blanca de hosts va en la app.** Servida por el backend no protege: un servidor
+  falso serviría la suya.
 
 ---
 

@@ -29,7 +29,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "TIPODOCU")
+@Table(name = "SRF_TIPODOCU")
 public class TipoRequisicionModel {
 
     @Id

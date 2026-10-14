@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "ROLEFORM")
+@Table(name = "FPL_ROLEFORM")
 @IdClass(RoleformPK.class)
 public class RoleformEntity {
 

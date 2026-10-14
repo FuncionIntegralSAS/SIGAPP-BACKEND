@@ -11,10 +11,10 @@ import com.finte.sigapp.model.UsabadaModel;
 public interface UsabadaRepository extends JpaRepository<UsabadaModel, String> {
 
     @Query(value = """
-            SELECT USBDCODI,USBDDESC,pkgEncriptar.funDesencriptar(USBDCONT) AS USBDCONT,
+            SELECT USBDCODI,USBDDESC,SRF_PKGENCRIPTAR.funDesencriptar(USBDCONT) AS USBDCONT,
                    USBDEXCO,USBDINFA,USBDESTA,PERSCODI
-              FROM USUABADA
-              JOIN personal p ON  usbdcodi = persusua
+              FROM SRF_USUABADA
+              JOIN SRF_PERSONAL p ON  usbdcodi = persusua
              WHERE USBDCODI = :username """, nativeQuery = true)
     public Optional<UsabadaModel> buscarPorUsername(@Param("username") String username);
 

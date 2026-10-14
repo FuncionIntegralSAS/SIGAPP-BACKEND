@@ -29,7 +29,7 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @Entity
 @IdClass(PlacaRequisicionId.class)
-@Table(name = "ASPLMORS")
+@Table(name = "SRF_ASPLMORS")
 public class PlacaRequisicionModel {
 
     @Id

@@ -17,12 +17,12 @@ public class BodegaRepository  {
 
   public List<BodegaModel> buscarPorDivision(String codigoDivision) {
     String sql = """
-            SELECT BODECODI, BODENOMB, BODEDIVI, BODEESTA
-              FROM BODEGA
+            SELECT BODECODI, BODEDESC, BODEDIVI, BODEESTA
+              FROM SRF_BODEGA
              WHERE BODEESTA = 'ac'
                AND BODEDIVI = :divi
                AND BODETIBO = 'PE'
-             ORDER BY BODENOMB ASC
+             ORDER BY BODEDESC ASC
         """;
 
     MapSqlParameterSource params = new MapSqlParameterSource()

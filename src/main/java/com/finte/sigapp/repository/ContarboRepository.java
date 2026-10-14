@@ -18,7 +18,7 @@ public interface ContarboRepository extends JpaRepository<ContarboEntity, Contar
       C.COABCABO,C.COABDIEM,C.COABDITD,
       C.COABDIND,C.COABFESI,C.COABDIGI,
       C.COABTERM,C.COABESTA,C.COABVAUN,C.COABFECI
-      FROM CONTARBO C
+      FROM SRF_CONTARBO C
       WHERE C.COABEMPR = :empresa
         AND C.COABBODE = :bodega
         AND C.COABFECH BETWEEN
@@ -39,7 +39,7 @@ public interface ContarboRepository extends JpaRepository<ContarboEntity, Contar
                C.COABDIND,C.COABFESI,C.COABDIGI,
                C.COABTERM,C.COABESTA,C.COABVAUN,
                C.COABFECI
-          FROM CONTARBO C
+          FROM SRF_CONTARBO C
          WHERE C.COABBODE = :bodega
            AND C.COABESTA = 'ac'
       ORDER BY C.COABARTI ASC
@@ -48,7 +48,7 @@ public interface ContarboRepository extends JpaRepository<ContarboEntity, Contar
 
   @Modifying
   @Query(value = """
-      UPDATE CONTARBO
+      UPDATE SRF_CONTARBO
          SET COABESTA = 'ce',
              COABFECI = SYSDATE
        WHERE COABESTA = 'ac'

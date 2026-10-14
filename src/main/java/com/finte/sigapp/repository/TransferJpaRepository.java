@@ -38,7 +38,7 @@ public interface TransferJpaRepository extends JpaRepository<MovitrasTraspasoMod
          AND (:bodega IS NULL
               OR EXISTS (SELECT 1
                            FROM FI_MOVITRAS T2
-                           JOIN ACTIFIJO A2
+                           JOIN SRF_ACTIFIJO A2
                              ON A2.ACFIARTI = T2.MOTRARTI
                             AND NVL(A2.ACFIPLAC,'.') = T2.MOTRPLAC
                           WHERE T2.MOTRNUTR = T.MOTRNUTR

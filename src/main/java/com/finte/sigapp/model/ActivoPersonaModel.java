@@ -31,7 +31,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Entity
 @IdClass(ActivoPersonaId.class)
-@Table(name = "ACTIFIJO")
+@Table(name = "SRF_ACTIFIJO")
 public class ActivoPersonaModel {
 
     @Id

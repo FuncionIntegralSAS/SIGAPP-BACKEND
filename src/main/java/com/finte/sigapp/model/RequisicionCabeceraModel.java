@@ -28,7 +28,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @Entity
 @IdClass(RequisicionId.class)
-@Table(name = "REQUSUMI")
+@Table(name = "SRF_REQUSUMI")
 public class RequisicionCabeceraModel {
 
     @Id

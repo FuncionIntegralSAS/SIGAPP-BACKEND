@@ -30,7 +30,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @Entity
 @IdClass(RequisicionId.class)
-@Table(name = "MOVIRESU")
+@Table(name = "SRF_MOVIRESU")
 public class RequisicionBandejaModel {
 
     @Id
