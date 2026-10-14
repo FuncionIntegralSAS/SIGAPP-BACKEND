@@ -37,6 +37,7 @@ class BodegaServiceImplTest {
         BodegaModel mockModel = BodegaModel.builder()
                 .bodeCodi("BOD01")
                 .bodeDesc("Bodega Central")
+                .bodeDivi("DIV_1")
                 .build();
 
         when(repository.buscarPorDivision("DIV_1")).thenReturn(List.of(mockModel));
@@ -47,6 +48,7 @@ class BodegaServiceImplTest {
         assertEquals(1, result.size());
         assertEquals("BOD01", result.get(0).getId());
         assertEquals("Bodega Central", result.get(0).getName());
+        assertEquals("DIV_1", result.get(0).getDivisionId());
 
         System.out.println("[buscarPorDivision_RetornaListaMapeada] Bodegas transformadas y mapeadas:");
         result.forEach(b -> System.out.println("   -> ID: " + b.getId() + " | Nombre: " + b.getName()));

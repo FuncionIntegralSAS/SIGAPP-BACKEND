@@ -60,6 +60,7 @@ public class BodegaServiceImpl implements BodegaService {
         return BodegaResponse.builder()
                 .id(model.getBodeCodi())
                 .name(model.getBodeDesc())
+                .divisionId(model.getBodeDivi())
                 .build();
     }
 }
