@@ -27,10 +27,10 @@ public interface RequisicionCabeceraRepository extends JpaRepository<Requisicion
                    R.RESUCEIN, R.RESUTERC,
                    NULLIF(BF.BODERESP, '.') AS RESPBODE,
                    NULLIF(BD.BODERESP, '.') AS RESPBODS
-              FROM REQUSUMI R
-              LEFT JOIN BODEGA BF ON BF.BODEEMPR = R.RESUTDEM
+              FROM SRF_REQUSUMI R
+              LEFT JOIN SRF_BODEGA BF ON BF.BODEEMPR = R.RESUTDEM
                                  AND BF.BODECODI = R.RESUBODE
-              LEFT JOIN BODEGA BD ON BD.BODEEMPR = R.RESUTDEM
+              LEFT JOIN SRF_BODEGA BD ON BD.BODEEMPR = R.RESUTDEM
                                  AND BD.BODECODI = R.RESUBODS
              WHERE R.RESUTDEM = :empresa
                AND R.RESUTIDO = :tipoDocumento

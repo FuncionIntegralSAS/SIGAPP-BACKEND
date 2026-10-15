@@ -29,8 +29,8 @@ public interface TipoRequisicionRepository extends JpaRepository<TipoRequisicion
      */
     @Query(value = """
             SELECT T.TIDOTIDO, T.TIDODESC
-              FROM TIPODOCU T
-              JOIN EQUIVALE E ON E.EQUICODI = T.TIDOTIDO
+              FROM SRF_TIPODOCU T
+              JOIN SRF_EQUIVALE E ON E.EQUICODI = T.TIDOTIDO
                              AND E.EQUICLEQ = 'COBO'
                              AND E.EQUITIPO = 'REQU'
                              AND E.EQUIESTA = 'ac'

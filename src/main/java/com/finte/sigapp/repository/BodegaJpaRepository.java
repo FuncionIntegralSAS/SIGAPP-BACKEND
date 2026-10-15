@@ -14,7 +14,7 @@ public interface BodegaJpaRepository extends JpaRepository<BodegaEntity, BodegaP
 
   @Query(value = """
       SELECT T.BODECODI,T.BODEEMPR, T.BODEDESC, T.BODEESTA
-       FROM bodega T
+       FROM SRF_BODEGA T
       WHERE T.BODEEMPR = :empresa
         AND T.BODETIBO = :tipo
       """, nativeQuery = true)
@@ -22,8 +22,8 @@ public interface BodegaJpaRepository extends JpaRepository<BodegaEntity, BodegaP
 
   @Query(value = """
       SELECT T.BODECODI, T.BODEEMPR, T.BODEDESC, T.BODEESTA
-        FROM BODEGA T
-        JOIN CONTARBO C
+        FROM SRF_BODEGA T
+        JOIN SRF_CONTARBO C
           ON T.BODEEMPR = C.COABEMPR
          AND T.BODECODI = C.COABBODE
        WHERE T.BODEEMPR = :empresa
@@ -43,7 +43,7 @@ public interface BodegaJpaRepository extends JpaRepository<BodegaEntity, BodegaP
    */
   @Query(value = """
       SELECT MAX(T.BODETIBO)
-        FROM BODEGA T
+        FROM SRF_BODEGA T
        WHERE T.BODECODI = :bodega
          AND (:empresa IS NULL OR T.BODEEMPR = :empresa)
       """, nativeQuery = true)

@@ -51,7 +51,7 @@ public interface ActivoPersonaRepository extends JpaRepository<ActivoPersonaMode
                   THEN 1
                   ELSE 0
              END AS ENTRAMITE
-        FROM ACTIFIJO A
+        FROM SRF_ACTIFIJO A
        WHERE A.ACFIPERS = :persona
          AND A.ACFIESTA = 'ac'
          AND A.ACFIBODE = :bodega

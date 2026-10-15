@@ -38,8 +38,8 @@ public interface ActivoCompatibilidadRepository extends JpaRepository<ActivoComp
                    A.ACFICEIN,
                    A.ACFIBODE,
                    B.BODETIBO
-              FROM ACTIFIJO A
-              LEFT JOIN BODEGA B
+              FROM SRF_ACTIFIJO A
+              LEFT JOIN SRF_BODEGA B
                 ON B.BODECODI = A.ACFIBODE
                AND B.BODEEMPR = A.ACFIBOEM
              WHERE A.ACFIARTI IN (:articulos)

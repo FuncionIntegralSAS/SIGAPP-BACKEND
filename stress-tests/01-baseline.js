@@ -1,62 +1,57 @@
 // ============================================================
 //  PASO 1 - Baseline. Corre ESTO antes que nada.
 //
-//  1 solo usuario, sin concurrencia. Mide el piso real de cada endpoint:
-//  cuanto tarda una peticion cuando NADA compite por el pool de conexiones.
+//  1 solo usuario, sin concurrencia. Mide el piso real de CADA endpoint de
+//  lectura de los tres modulos: cuanto tarda una peticion cuando NADA compite
+//  por el pool de conexiones.
 //
-//  De aqui salen los umbrales del script de carga. Poner p(95)<500 a ojo no
-//  sirve: la BD de dev esta en Phoenix y solo el viaje de red ya puede
-//  gastarse buena parte de ese presupuesto.
+//  De aqui salen los umbrales de la prueba de carga: deja el archivo
+//  resultados/baseline.json, que 02-carga.js lee para fijar un p95 por
+//  endpoint. Poner p(95)<500 a ojo no sirve: la BD de dev esta en Phoenix y
+//  solo el viaje de red ya puede gastarse buena parte de ese presupuesto.
 //
-//  Ejecutar:
-//    k6 run stress-tests/01-baseline.js
+//  Ejecutar (desde la carpeta stress-tests):
+//    k6 run -e ADMIN_USER=... -e ADMIN_PASS=... 01-baseline.js
 // ============================================================
 import { sleep } from 'k6';
-import { Trend } from 'k6/metrics';
-import {
-    loginContador,
-    endpointsLectura,
-    checkLectura,
-    METRICAS_LECTURA,
-} from './lib/sigapp.js';
+import { ENDPOINTS, endpointsDisponibles, ejecutar, prepararContexto } from './lib/sigapp.js';
+
+// Una submetrica por endpoint: un p95 global mezclando todos no dice cual es
+// el lento, que es justo lo que un baseline tiene que responder. k6 solo
+// calcula una submetrica si tiene un threshold, y 'p(95)>=0' no valida nada:
+// existe para que el resumen traiga el numero. Esta corrida no valida
+// rendimiento, solo mide.
+const thresholds = {};
+for (const e of ENDPOINTS) {
+    thresholds[`http_req_duration{endpoint:${e.nombre}}`] = ['p(95)>=0'];
+}
 
 export const options = {
     vus: 1,
-    duration: '30s',
-    // Sin thresholds a proposito: esta corrida NO valida nada, solo mide.
-    // Es la que produce los numeros para calibrar la prueba de carga.
+    duration: __ENV.DURACION || '1m',
+    thresholds,
 };
 
-// Una metrica por endpoint. Un p95 global mezclando los cinco no dice cual es
-// el lento, que es justo lo que un baseline tiene que responder.
-const latencias = {};
-for (const metrica of METRICAS_LECTURA) {
-    latencias[metrica] = new Trend(`lat_${metrica}`, true);
-}
-
 export function setup() {
-    return { token: loginContador() };
+    return prepararContexto();
 }
 
-export default function (data) {
-    for (const endpoint of endpointsLectura(data.token)) {
-        const res = endpoint.ejecutar();
-
-        checkLectura(res, endpoint.nombre);
-        latencias[endpoint.metrica].add(res.timings.duration);
-
-        sleep(0.5);
+export default function (ctx) {
+    for (const e of endpointsDisponibles(ctx)) {
+        ejecutar(e, ctx);
+        sleep(0.3);
     }
 }
 
 export function handleSummary(data) {
     const ms = (n) => `${Math.round(n)}`.padStart(6);
 
-    const filas = endpointsParaReporte()
+    const filas = ENDPOINTS
         .map((e) => {
-            const m = data.metrics[`lat_${e.metrica}`];
-            if (!m) return null;
-            // Las metricas Trend de k6 no exponen 'count', solo estadisticos.
+            const m = data.metrics[`http_req_duration{endpoint:${e.nombre}}`];
+            if (!m || !m.values || !m.values.max) {
+                return null;
+            }
             return {
                 nombre: e.nombre,
                 p95: m.values['p(95)'],
@@ -65,40 +60,48 @@ export function handleSummary(data) {
                 max: m.values.max,
             };
         })
-        .filter(Boolean)
+        .filter((f) => f !== null && !Number.isNaN(f.p95))
         .sort((a, b) => b.p95 - a.p95);
 
+    // Umbral por endpoint para la prueba de carga: el triple del p95 aislado,
+    // redondeado a la centena y nunca por debajo de 300 ms.
+    const umbrales = {};
+    for (const f of filas) {
+        umbrales[f.nombre] = Math.max(300, Math.ceil((f.p95 * 3) / 100) * 100);
+    }
+
     const tabla = filas
-        .map((f) => `  ${ms(f.p95)}  ${ms(f.avg)}  ${ms(f.med)}  ${ms(f.max)}   ${f.nombre}`)
+        .map((f) => `  ${ms(f.p95)}  ${ms(f.avg)}  ${ms(f.med)}  ${ms(f.max)}  ${ms(umbrales[f.nombre])}   ${f.nombre}`)
         .join('\n');
 
-    const p95Global = data.metrics.http_req_duration.values['p(95)'];
-    const sugerido = Math.ceil((p95Global * 3) / 100) * 100;
+    const omitidos = ENDPOINTS.filter((e) => !filas.find((f) => f.nombre === e.nombre)).map((e) => e.nombre);
 
+    const p95Global = data.metrics.http_req_duration.values['p(95)'];
     const tasaChecks = data.metrics.checks ? data.metrics.checks.values.rate * 100 : 100;
-    const tasaFallos = data.metrics.http_req_failed.values.rate * 100;
+    const tecnicos = data.metrics.errores_tecnicos ? data.metrics.errores_tecnicos.values.count : 0;
 
     const resumen = `
 ==========================================================================
  BASELINE - 1 usuario, sin concurrencia (piso de latencia)
 ==========================================================================
-     p95     avg     med     max   endpoint
+     p95     avg     med     max  umbral   endpoint
 ${tabla}
 
   --- global ---
-  p95 ${Math.round(p95Global)} ms | avg ${Math.round(data.metrics.http_req_duration.values.avg)} ms | ${data.metrics.http_reqs.values.count} peticiones
-  checks OK: ${tasaChecks.toFixed(1)}%   peticiones fallidas: ${tasaFallos.toFixed(1)}%
-
-  Umbral sugerido para la prueba de carga: p(95) < ${sugerido} ms
-  (el triple del baseline: margen razonable al pasar de 1 a 50 usuarios)
+  p95 ${Math.round(p95Global)} ms | ${data.metrics.http_reqs.values.count} peticiones
+  checks OK: ${tasaChecks.toFixed(1)}%   errores tecnicos: ${tecnicos}
+${omitidos.length ? `\n  Sin medir (faltan datos o credenciales): ${omitidos.join(', ')}\n` : ''}
+  'umbral' = p95 x 3: lo que 02-carga.js exigira a cada endpoint con
+  concurrencia. Se guarda en resultados/baseline.json.
 ==========================================================================
 `;
 
-    return { stdout: resumen };
-}
-
-// Solo para nombrar las filas del reporte: no ejecuta peticiones, por eso el
-// token vacio es suficiente.
-function endpointsParaReporte() {
-    return endpointsLectura('');
+    return {
+        stdout: resumen,
+        'resultados/baseline.json': JSON.stringify({
+            fecha: new Date().toISOString(),
+            p95Global,
+            umbrales,
+        }, null, 2),
+    };
 }

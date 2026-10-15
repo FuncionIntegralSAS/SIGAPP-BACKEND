@@ -20,7 +20,7 @@ public class ConteoFisicoRepository {
     private final ProcedureExecutor procedureExecutor;
 
     /**
-     * Llama al procedimiento PL/SQL PKGCONTARBO.proGeneContFisi
+     * Llama al procedimiento PL/SQL PKGCONTARBO.proGeneContFisi (via el sinonimo SRF_PKGCONTARBO)
      * para generar el conteo físico.
      */
     public void generarConteoFisico(String empresa,
@@ -42,12 +42,12 @@ public class ConteoFisicoRepository {
                 new ProcedureParam("P_sbArti", ParameterMode.IN, String.class, articulo),
                 new ProcedureParam("P_dtFech", ParameterMode.IN, Date.class, fecha),
                 new ProcedureParam("P_sbVaex", ParameterMode.IN, String.class, verificarExistencia));
-        procedureExecutor.ejecutarProcedimiento("PKGCONTARBO.proGeneContFisi",
+        procedureExecutor.ejecutarProcedimiento("SRF_PKGCONTARBO.proGeneContFisi",
                 params);
     }
 
     /**
-     * Invoca la función PL/SQL PKGCONTARBO.fun_ValidaBodega para verificar si la
+     * Invoca la función PL/SQL PKGCONTARBO.fun_ValidaBodega (via el sinonimo SRF_PKGCONTARBO) para verificar si la
      * bodega ya se encuentra en conteo físico.
      *
      * @return true si la bodega ya está en conteo, false si no lo está.
@@ -64,7 +64,7 @@ public class ConteoFisicoRepository {
                 new ProcedureParam("sbCoabBolo", ParameterMode.IN, String.class, bodegaLogica),
                 new ProcedureParam("dtCoabFech", ParameterMode.IN, LocalDateTime.class, fecha));
 
-        return procedureExecutor.ejecutarFuncion("PKGCONTARBO.fun_ValidaBodega",
+        return procedureExecutor.ejecutarFuncion("SRF_PKGCONTARBO.fun_ValidaBodega",
                 Boolean.class,
                 params);
     }

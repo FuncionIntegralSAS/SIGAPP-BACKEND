@@ -18,7 +18,7 @@ public class BodegaRepository {
   public List<BodegaModel> buscarPorDivision(String codigoDivision) {
     String sql = """
             SELECT BODECODI, BODEDESC, BODEDIVI, BODEESTA
-              FROM BODEGA
+              FROM SRF_BODEGA
              WHERE BODEESTA = 'ac'
                AND BODEDIVI = :divi
                AND BODETIBO = 'PE'

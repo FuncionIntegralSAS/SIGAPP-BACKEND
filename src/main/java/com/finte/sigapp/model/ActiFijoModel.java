@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "ACTIFIJO")
+@Table(name = "SRF_ACTIFIJO")
 public class ActiFijoModel {
     @Id
     @Column(name = "ACFIARTI")

@@ -37,7 +37,7 @@ public class ProcedureExecutor {
      * Ejecuta un procedimiento almacenado en Oracle que no retorna valor (void).
      *
      * @param procedureName nombre del procedimiento (ej:
-     *                      "PKGCONTARBO.proGeneContFisi")
+     *                      "SRF_PKGCONTARBO.proGeneContFisi")
      * @param params        parámetros de entrada: cada List<ProcedureParam>
      *                      contiene {nombre,
      *                      valor, Class<?>, ParameterMode.IN/OUT}

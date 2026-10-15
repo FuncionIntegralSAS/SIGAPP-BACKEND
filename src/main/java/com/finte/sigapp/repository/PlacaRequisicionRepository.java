@@ -38,8 +38,8 @@ public interface PlacaRequisicionRepository extends JpaRepository<PlacaRequisici
      */
     @Query(value = """
             SELECT A.ASPLTDEM, A.ASPLTIDO, A.ASPLNUME, A.ASPLSECU, A.ASPLARTI, A.ASPLPLAC
-              FROM ASPLMORS A
-              LEFT JOIN ACTIFIJO F ON F.ACFIARTI = A.ASPLARTI
+              FROM SRF_ASPLMORS A
+              LEFT JOIN SRF_ACTIFIJO F ON F.ACFIARTI = A.ASPLARTI
                                   AND F.ACFIPLAC = A.ASPLPLAC
                                   AND F.ACFIDIEM = A.ASPLTDEM
              WHERE A.ASPLTDEM = :empresa

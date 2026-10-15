@@ -47,10 +47,17 @@ Antes de ejecutar el `06` hay que reemplazar los valores marcados con
 
 ⚠️ **El paquete `PKG_FI_MOVITRAS` se compila en el esquema de recursos físicos
 `SRF` (`SRFPNACUA`), no en `ARQGUIPNACUA`.** Es el esquema dueño de
-`FI_MOVITRAS` y con el que se conecta el backend; ahí es donde resuelven sin
-calificar las tablas del ERP que usa el paquete (`REQUSUMI`, `ACTIFIJO`,
-`PARAOPER`, `TIMOOPER`, `TIPODOCU`). Compilarlo en otro esquema deja el cuerpo
-inválido con `PL/SQL: ORA-00942`.
+`FI_MOVITRAS`; ahí es donde resuelven sin calificar las tablas del ERP que usa
+el paquete (`REQUSUMI`, `ACTIFIJO`, `PARAOPER`, `TIMOOPER`, `TIPODOCU`).
+Compilarlo en otro esquema deja el cuerpo inválido con `PL/SQL: ORA-00942`.
+
+**El backend NO se conecta como `SRFPNACUA` sino como `ARQGUIPNACUA`**, el
+usuario de interfaz del ERP. Para ese usuario los nombres sin esquema no
+significan lo mismo: llega a las tablas del SRF con el prefijo `SRF_`
+(`SRF_BODEGA`), y nombres como `PARAOPER`, `EQUIVALE` o `PERSONAL` a secas le
+apuntan a las tablas del **FPL**. Por eso las consultas Java usan `SRF_<tabla>`
+y los objetos propios (`FI_*`, `PKG_FI_*`) necesitan sinónimo. Lo que resuelve
+cada nombre se comprueba con `validacion/VALIDAR_ACCESO_USUARIO_BD.sql`.
 
 Antes de aplicar `03` y `04`, confirmar la conexión:
 
