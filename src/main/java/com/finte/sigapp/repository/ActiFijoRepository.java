@@ -26,7 +26,7 @@ public interface ActiFijoRepository extends JpaRepository<ActiFijoModel, Long> {
         ACFIARTI,
         ACFIOBSE,
         ACFIPLAC
-      FROM actifijo
+      FROM srf_actifijo
       WHERE ACFIESTA = 'ac'
         AND ACFIBODE = :bodega
         AND ACFIBOEM = :empresa
