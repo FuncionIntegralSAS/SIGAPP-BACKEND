@@ -19,8 +19,8 @@ public class ActiFijoModel {
     @Id
     @Column(name = "ACFIARTI")
     private String acfiarti; // Código Artículo
-    // @Column(name = "ACFIPLAC")
-    // private String acfiPlac; // Placa
+    @Column(name = "ACFIPLAC")
+    private String acfiPlac; // Placa
     // @Column(name = "ACFIBODE")
     // private String acfiBode; // Bodega
     @Column(name = "ACFIOBSE")

@@ -6,9 +6,9 @@ import lombok.Data;
 @Data
 @Builder
 public class ArticleResponse {
-    private String id;
-    private String name;
-    // private String licensePlate;
+    private String artiCodi;
+    private String artiDesc;
+    private String artiPlac;
     // private String warehouse;
     // private String responsible;
     // private String status;

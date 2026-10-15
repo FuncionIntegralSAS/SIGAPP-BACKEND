@@ -22,8 +22,10 @@ public interface ActiFijoRepository extends JpaRepository<ActiFijoModel, Long> {
       @Param("bodega") String bodega);
 
   @Query(value = """
-      SELECT DISTINCT ACFIARTI,
-                      ACFIOBSE
+      SELECT
+        ACFIARTI,
+        ACFIOBSE,
+        ACFIPLAC
       FROM actifijo
       WHERE ACFIESTA = 'ac'
         AND ACFIBODE = :bodega

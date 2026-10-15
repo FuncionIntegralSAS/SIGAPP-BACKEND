@@ -10,12 +10,9 @@ public class ArticleMapper {
         if (model == null)
             return null;
         return ArticleResponse.builder()
-                .id(model.getAcfiarti())
-                .name(model.getAcfiobse()) // Usamos la observación como nombre
-                // .licensePlate(model.getAcfiPlac())
-                // .warehouse(model.getAcfiBode())
-                // .status(model.getAcfiEsta())
-                // Los campos GPS y fotos se manejarán en la lógica de negocio
+                .artiCodi(model.getAcfiarti())
+                .artiDesc(model.getAcfiobse())
+                .artiPlac(model.getAcfiPlac())
                 .build();
     }
 }
